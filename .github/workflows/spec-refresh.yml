@@ -33,20 +33,32 @@ jobs:
           go run ./hack/spec
           go generate ./...
           go build ./...
-      - uses: peter-evans/create-pull-request@v7
-        id: pr
-        with:
-          branch: spec-refresh
-          title: "machines: refresh the Machines API spec"
-          commit-message: "machines: refresh the Machines API spec"
-          body: |
-            Automated refresh of `flyio/machines/fly-machines.openapi3.json`
-            from https://docs.machines.dev/openapi.json, with the client and
-            docs regenerated. Review the `gen.go` diff for shape changes on
-            the types the resources use before merging.
-          labels: spec-refresh
-      - name: Run ci on the PR branch
-        if: contains(fromJSON('["created", "updated"]'), steps.pr.outputs.pull-request-operation)
+      - name: Open or update the PR, then run ci on its branch
+        # gh is GitHub's own and preinstalled on the runner, so this needs no
+        # third-party action holding contents: write. The branch is the bot's
+        # to force-push; the PR is created once and the push updates it.
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run ci.yml --ref spec-refresh
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "upstream unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C spec-refresh
+          git add -A
+          git commit -m "machines: refresh the Machines API spec"
+          git push --force origin spec-refresh
+          if [ "$(gh pr list --head spec-refresh --state open --json number --jq length)" = "0" ]; then
+            gh pr create --base main --head spec-refresh \
+              --title "machines: refresh the Machines API spec" \
+              --body "$(cat <<'BODY'
+          Automated refresh of `flyio/machines/fly-machines.openapi3.json`
+          from https://docs.machines.dev/openapi.json, with the client and
+          docs regenerated. Review the `gen.go` diff for shape changes on
+          the types the resources use before merging.
+          BODY
+          )"
+          fi
+          gh workflow run ci.yml --ref spec-refresh
