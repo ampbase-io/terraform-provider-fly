@@ -1627,7 +1627,7 @@ func buildHealthchecks(hcs []containerHealthcheckModel) []machines.FlyContainerH
 	for i, hc := range hcs {
 		out[i] = machines.FlyContainerHealthcheck{
 			Name:             new(hc.Name.ValueString()),
-			Kind:             strPtr[machines.FlyContainerHealthcheckKind](hc.Kind),
+			Kind:             enumPtr[machines.FlyContainerHealthcheckKind](hc.Kind),
 			Interval:         intPtr(hc.IntervalSeconds),
 			Timeout:          intPtr(hc.TimeoutSeconds),
 			GracePeriod:      intPtr(hc.GracePeriodSeconds),
@@ -1661,21 +1661,22 @@ func buildHTTPHealthcheck(h *httpHealthcheckModel) *machines.FlyHTTPHealthcheck 
 	}
 	return &machines.FlyHTTPHealthcheck{
 		Port:          new(int(h.Port.ValueInt64())),
-		Path:          strPtr[string](h.Path),
-		Method:        strPtr[string](h.Method),
-		Scheme:        strPtr[machines.FlyContainerHealthcheckScheme](h.Scheme),
-		TlsServerName: strPtr[string](h.TLSServerName),
+		Path:          strPtr(h.Path),
+		Method:        strPtr(h.Method),
+		Scheme:        enumPtr[machines.FlyContainerHealthcheckScheme](h.Scheme),
+		TlsServerName: strPtr(h.TLSServerName),
 		TlsSkipVerify: boolPtr(h.TLSSkipVerify),
 	}
 }
 
-// intPtr, strPtr and boolPtr render an unset optional as an omitted field
-// rather than a zero one. The wire types are `omitempty` pointers, so
-// absent and zero are distinguishable — sending 0 for an interval or a
-// threshold states a value where the intent was to leave it unset.
+// intPtr, strPtr, enumPtr and boolPtr render an unset optional as an
+// omitted field rather than a zero one. The wire types are `omitempty`
+// pointers, so absent and zero are distinguishable — sending 0 for an
+// interval or a threshold states a value where the intent was to leave it
+// unset.
 //
-// strPtr is generic over the string kind because the API models several of
-// these fields as named enum types; the caller names the one it wants.
+// enumPtr is strPtr for the fields the API models as named string types;
+// the caller names the type because nothing in the argument determines it.
 func intPtr(v types.Int64) *int {
 	if v.IsNull() || v.IsUnknown() {
 		return nil
@@ -1683,7 +1684,11 @@ func intPtr(v types.Int64) *int {
 	return new(int(v.ValueInt64()))
 }
 
-func strPtr[T ~string](v types.String) *T {
+func strPtr(v types.String) *string {
+	return enumPtr[string](v)
+}
+
+func enumPtr[T ~string](v types.String) *T {
 	if v.IsNull() || v.IsUnknown() {
 		return nil
 	}
@@ -2160,9 +2165,9 @@ func buildChecks(checks []machineCheckModel) map[string]machines.FlyMachineCheck
 			m := chk.Method.ValueString()
 			c.Method = &m
 		}
-		c.Interval = strPtr[string](chk.Interval)
-		c.Timeout = strPtr[string](chk.Timeout)
-		c.GracePeriod = strPtr[string](chk.GracePeriod)
+		c.Interval = strPtr(chk.Interval)
+		c.Timeout = strPtr(chk.Timeout)
+		c.GracePeriod = strPtr(chk.GracePeriod)
 		result[chk.Name.ValueString()] = c
 	}
 	return result
@@ -2222,8 +2227,8 @@ func buildServices(services []serviceModel) []machines.FlyMachineService {
 				p := chk.Path.ValueString()
 				c.Path = &p
 			}
-			c.Interval = strPtr[string](chk.Interval)
-			c.Timeout = strPtr[string](chk.Timeout)
+			c.Interval = strPtr(chk.Interval)
+			c.Timeout = strPtr(chk.Timeout)
 			if !chk.Method.IsNull() {
 				m := chk.Method.ValueString()
 				c.Method = &m
