@@ -3,8 +3,10 @@ name: spec-refresh
 # Refreshes the Machines API document from Fly and regenerates the client
 # and docs, opening a PR when anything changed. Weekly, and on demand.
 #
-# A PR opened with GITHUB_TOKEN does not trigger the ci workflow on its own;
-# close and reopen it, or push an empty commit, to get a run.
+# A PR opened with GITHUB_TOKEN does not trigger the ci workflow's
+# pull_request event, so the last step dispatches ci on the branch instead:
+# workflow_dispatch runs are the one kind GITHUB_TOKEN may start, and their
+# checks attach to the branch head the PR shows.
 on:
   schedule:
     - cron: "17 6 * * 1"
@@ -13,6 +15,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write
 
 jobs:
   refresh:
@@ -31,6 +34,7 @@ jobs:
           go generate ./...
           go build ./...
       - uses: peter-evans/create-pull-request@v7
+        id: pr
         with:
           branch: spec-refresh
           title: "machines: refresh the Machines API spec"
@@ -41,3 +45,8 @@ jobs:
             docs regenerated. Review the `gen.go` diff for shape changes on
             the types the resources use before merging.
           labels: spec-refresh
+      - name: Run ci on the PR branch
+        if: contains(fromJSON('["created", "updated"]'), steps.pr.outputs.pull-request-operation)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ci.yml --ref spec-refresh
