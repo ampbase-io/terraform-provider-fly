@@ -262,7 +262,7 @@ type dependencyModel struct {
 // gated container never starts, silently. Both halves are measured against
 // real Fly by dev/fly-container-exit-probe.sh.
 //
-// The times are seconds, not the `FlyDuration` strings the machine-level
+// The times are seconds, not the Go duration strings the machine-level
 // block takes, because that is the wire type here
 // (FlyContainerHealthcheck.Interval is *int). The unit is in the name so
 // that a block copied from one to the other fails validation instead of
@@ -2160,18 +2160,9 @@ func buildChecks(checks []machineCheckModel) map[string]machines.FlyMachineCheck
 			m := chk.Method.ValueString()
 			c.Method = &m
 		}
-		if !chk.Interval.IsNull() {
-			v := machines.FlyDuration(chk.Interval.ValueString())
-			c.Interval = &v
-		}
-		if !chk.Timeout.IsNull() {
-			v := machines.FlyDuration(chk.Timeout.ValueString())
-			c.Timeout = &v
-		}
-		if !chk.GracePeriod.IsNull() {
-			v := machines.FlyDuration(chk.GracePeriod.ValueString())
-			c.GracePeriod = &v
-		}
+		c.Interval = strPtr[string](chk.Interval)
+		c.Timeout = strPtr[string](chk.Timeout)
+		c.GracePeriod = strPtr[string](chk.GracePeriod)
 		result[chk.Name.ValueString()] = c
 	}
 	return result
@@ -2231,14 +2222,8 @@ func buildServices(services []serviceModel) []machines.FlyMachineService {
 				p := chk.Path.ValueString()
 				c.Path = &p
 			}
-			if !chk.Interval.IsNull() {
-				v := machines.FlyDuration(chk.Interval.ValueString())
-				c.Interval = &v
-			}
-			if !chk.Timeout.IsNull() {
-				v := machines.FlyDuration(chk.Timeout.ValueString())
-				c.Timeout = &v
-			}
+			c.Interval = strPtr[string](chk.Interval)
+			c.Timeout = strPtr[string](chk.Timeout)
 			if !chk.Method.IsNull() {
 				m := chk.Method.ValueString()
 				c.Method = &m

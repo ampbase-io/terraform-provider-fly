@@ -55,6 +55,39 @@ func (e CertificateEntryStatus) Valid() bool {
 	}
 }
 
+// Defines values for IPAssignmentType.
+const (
+	IPAssignmentTypeEgressPair IPAssignmentType = "egress_pair"
+	IPAssignmentTypeEgressV4   IPAssignmentType = "egress_v4"
+	IPAssignmentTypeEgressV6   IPAssignmentType = "egress_v6"
+	IPAssignmentTypePrivateV6  IPAssignmentType = "private_v6"
+	IPAssignmentTypeSharedV4   IPAssignmentType = "shared_v4"
+	IPAssignmentTypeV4         IPAssignmentType = "v4"
+	IPAssignmentTypeV6         IPAssignmentType = "v6"
+)
+
+// Valid indicates whether the value is a known member of the IPAssignmentType enum.
+func (e IPAssignmentType) Valid() bool {
+	switch e {
+	case IPAssignmentTypeEgressPair:
+		return true
+	case IPAssignmentTypeEgressV4:
+		return true
+	case IPAssignmentTypeEgressV6:
+		return true
+	case IPAssignmentTypePrivateV6:
+		return true
+	case IPAssignmentTypeSharedV4:
+		return true
+	case IPAssignmentTypeV4:
+		return true
+	case IPAssignmentTypeV6:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for IssuedCertificateType.
 const (
 	Ecdsa IssuedCertificateType = "ecdsa"
@@ -94,6 +127,39 @@ func (e MachineHostStatus) Valid() bool {
 	}
 }
 
+// Defines values for StopRequestSignal.
+const (
+	StopRequestSignalSIGHUP  StopRequestSignal = "SIGHUP"
+	StopRequestSignalSIGINT  StopRequestSignal = "SIGINT"
+	StopRequestSignalSIGKILL StopRequestSignal = "SIGKILL"
+	StopRequestSignalSIGQUIT StopRequestSignal = "SIGQUIT"
+	StopRequestSignalSIGTERM StopRequestSignal = "SIGTERM"
+	StopRequestSignalSIGUSR1 StopRequestSignal = "SIGUSR1"
+	StopRequestSignalSIGUSR2 StopRequestSignal = "SIGUSR2"
+)
+
+// Valid indicates whether the value is a known member of the StopRequestSignal enum.
+func (e StopRequestSignal) Valid() bool {
+	switch e {
+	case StopRequestSignalSIGHUP:
+		return true
+	case StopRequestSignalSIGINT:
+		return true
+	case StopRequestSignalSIGKILL:
+		return true
+	case StopRequestSignalSIGQUIT:
+		return true
+	case StopRequestSignalSIGTERM:
+		return true
+	case StopRequestSignalSIGUSR1:
+		return true
+	case StopRequestSignalSIGUSR2:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for VolumeHostStatus.
 const (
 	VolumeHostStatusOk          VolumeHostStatus = "ok"
@@ -109,6 +175,24 @@ func (e VolumeHostStatus) Valid() bool {
 	case VolumeHostStatusUnknown:
 		return true
 	case VolumeHostStatusUnreachable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VolumeType.
+const (
+	Cache VolumeType = "cache"
+	Local VolumeType = "local"
+)
+
+// Valid indicates whether the value is a known member of the VolumeType enum.
+func (e VolumeType) Valid() bool {
+	switch e {
+	case Cache:
+		return true
+	case Local:
 		return true
 	default:
 		return false
@@ -325,6 +409,39 @@ func (e FlyReplayCacheType) Valid() bool {
 	}
 }
 
+// Defines values for FlyStopConfigSignal.
+const (
+	FlyStopConfigSignalSIGHUP  FlyStopConfigSignal = "SIGHUP"
+	FlyStopConfigSignalSIGINT  FlyStopConfigSignal = "SIGINT"
+	FlyStopConfigSignalSIGKILL FlyStopConfigSignal = "SIGKILL"
+	FlyStopConfigSignalSIGQUIT FlyStopConfigSignal = "SIGQUIT"
+	FlyStopConfigSignalSIGTERM FlyStopConfigSignal = "SIGTERM"
+	FlyStopConfigSignalSIGUSR1 FlyStopConfigSignal = "SIGUSR1"
+	FlyStopConfigSignalSIGUSR2 FlyStopConfigSignal = "SIGUSR2"
+)
+
+// Valid indicates whether the value is a known member of the FlyStopConfigSignal enum.
+func (e FlyStopConfigSignal) Valid() bool {
+	switch e {
+	case FlyStopConfigSignalSIGHUP:
+		return true
+	case FlyStopConfigSignalSIGINT:
+		return true
+	case FlyStopConfigSignalSIGKILL:
+		return true
+	case FlyStopConfigSignalSIGQUIT:
+		return true
+	case FlyStopConfigSignalSIGTERM:
+		return true
+	case FlyStopConfigSignalSIGUSR1:
+		return true
+	case FlyStopConfigSignalSIGUSR2:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for FlyUnhealthyPolicy.
 const (
 	UnhealthyPolicyStop FlyUnhealthyPolicy = "stop"
@@ -342,8 +459,10 @@ func (e FlyUnhealthyPolicy) Valid() bool {
 
 // Defines values for MainStatusCode.
 const (
-	CapacityErr MainStatusCode = "insufficient_capacity"
-	Unknown     MainStatusCode = "unknown"
+	CapacityErr                MainStatusCode = "insufficient_capacity"
+	NameTakenErr               MainStatusCode = "name_taken"
+	Unknown                    MainStatusCode = "unknown"
+	VolumePlacementCapacityErr MainStatusCode = "volume_placement_capacity"
 )
 
 // Valid indicates whether the value is a known member of the MainStatusCode enum.
@@ -351,7 +470,11 @@ func (e MainStatusCode) Valid() bool {
 	switch e {
 	case CapacityErr:
 		return true
+	case NameTakenErr:
+		return true
 	case Unknown:
+		return true
+	case VolumePlacementCapacityErr:
 		return true
 	default:
 		return false
@@ -401,6 +524,7 @@ type App struct {
 	MachineCount      *int                 `json:"machine_count,omitempty"`
 	Name              *string              `json:"name,omitempty"`
 	Network           *string              `json:"network,omitempty"`
+	NetworkCidr       *string              `json:"network_cidr,omitempty"`
 	Organization      *AppOrganizationInfo `json:"organization,omitempty"`
 	Status            *string              `json:"status,omitempty"`
 	VolumeCount       *int                 `json:"volume_count,omitempty"`
@@ -436,6 +560,22 @@ type AppSecretsUpdateRequest struct {
 type AppSecretsUpdateResp struct {
 	Secrets []AppSecret `json:"secrets,omitempty"`
 	Version *int        `json:"version,omitempty"`
+}
+
+// AssignIPResponse defines model for AssignIPResponse.
+type AssignIPResponse struct {
+	CreatedAt *string `json:"created_at,omitempty"`
+	Egress    *bool   `json:"egress,omitempty"`
+	Ip        *string `json:"ip,omitempty"`
+
+	// IpPair ip_pair is returned when "egress-pair" IP type is requested; in this case, ip is null.
+	IpPair *IPPair `json:"ip_pair,omitempty"`
+
+	// Network The 6PN network a Flycast (private_v6) address belongs to. Null for all other IP types.
+	Network     *IPAssignmentNetwork `json:"network,omitempty"`
+	Region      *string              `json:"region,omitempty"`
+	ServiceName *string              `json:"service_name,omitempty"`
+	Shared      *bool                `json:"shared,omitempty"`
 }
 
 // CertificateCheckResponse defines model for CertificateCheckResponse.
@@ -537,7 +677,6 @@ type CreateMachineRequest struct {
 	// Config An object defining the Machine configuration
 	Config            *FlyMachineConfig `json:"config,omitempty"`
 	LeaseTtl          *int              `json:"lease_ttl,omitempty"`
-	Lsvd              *bool             `json:"lsvd,omitempty"`
 	MinSecretsVersion *int              `json:"min_secrets_version,omitempty"`
 
 	// Name Unique name for this Machine. If omitted, one is generated for you
@@ -600,9 +739,9 @@ type DeleteAppSecretResponse struct {
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	// Details Deprecated
-	Details interface{}     `json:"details,omitempty"`
-	Error   *string         `json:"error,omitempty"`
-	Status  *MainStatusCode `json:"status,omitempty"`
+	Details map[string]interface{} `json:"details,omitempty"`
+	Error   *string                `json:"error,omitempty"`
+	Status  *MainStatusCode        `json:"status,omitempty"`
 }
 
 // ExtendVolumeRequest defines model for ExtendVolumeRequest.
@@ -618,11 +757,31 @@ type ExtendVolumeResponse struct {
 
 // IPAssignment defines model for IPAssignment.
 type IPAssignment struct {
-	CreatedAt   *string `json:"created_at,omitempty"`
-	Ip          *string `json:"ip,omitempty"`
-	Region      *string `json:"region,omitempty"`
-	ServiceName *string `json:"service_name,omitempty"`
-	Shared      *bool   `json:"shared,omitempty"`
+	CreatedAt *string `json:"created_at,omitempty"`
+	Egress    *bool   `json:"egress,omitempty"`
+	Ip        *string `json:"ip,omitempty"`
+
+	// Network The 6PN network a Flycast (private_v6) address belongs to. Null for all other IP types.
+	Network     *IPAssignmentNetwork `json:"network,omitempty"`
+	Region      *string              `json:"region,omitempty"`
+	ServiceName *string              `json:"service_name,omitempty"`
+	Shared      *bool                `json:"shared,omitempty"`
+}
+
+// IPAssignmentNetwork The 6PN network a Flycast (private_v6) address belongs to. Null for all other IP types.
+type IPAssignmentNetwork struct {
+	// Name Network name; empty for the organization's default network.
+	Name    *string `json:"name,omitempty"`
+	OrgSlug *string `json:"org_slug,omitempty"`
+}
+
+// IPAssignmentType Type of IP address to allocate. "egress-pair" allocates both v4 and v6 egress IP addresses (recommended when using egress IPs).
+type IPAssignmentType string
+
+// IPPair defines model for IPPair.
+type IPPair struct {
+	V4 *string `json:"v4,omitempty"`
+	V6 *string `json:"v6,omitempty"`
 }
 
 // ImageRef defines model for ImageRef.
@@ -654,6 +813,7 @@ type ListAppsResponse struct {
 type Machine struct {
 	Checks           []CheckStatus      `json:"checks,omitempty"`
 	Config           *FlyMachineConfig  `json:"config,omitempty"`
+	Cordoned         *bool              `json:"cordoned,omitempty"`
 	CreatedAt        *string            `json:"created_at,omitempty"`
 	Events           []MachineEvent     `json:"events,omitempty"`
 	HostStatus       *MachineHostStatus `json:"host_status,omitempty"`
@@ -662,8 +822,9 @@ type Machine struct {
 	IncompleteConfig *FlyMachineConfig  `json:"incomplete_config,omitempty"`
 
 	// InstanceId InstanceID is unique for each version of the machine
-	InstanceId *string `json:"instance_id,omitempty"`
-	Name       *string `json:"name,omitempty"`
+	InstanceId *string        `json:"instance_id,omitempty"`
+	Lease      *StrippedLease `json:"lease,omitempty"`
+	Name       *string        `json:"name,omitempty"`
 
 	// Nonce Nonce is only every returned on machine creation if a lease_duration was provided.
 	Nonce *string `json:"nonce,omitempty"`
@@ -680,12 +841,12 @@ type MachineHostStatus string
 
 // MachineEvent defines model for MachineEvent.
 type MachineEvent struct {
-	Id        *string     `json:"id,omitempty"`
-	Request   interface{} `json:"request,omitempty"`
-	Source    *string     `json:"source,omitempty"`
-	Status    *string     `json:"status,omitempty"`
-	Timestamp *int        `json:"timestamp,omitempty"`
-	Type      *string     `json:"type,omitempty"`
+	Id        *string                `json:"id,omitempty"`
+	Request   map[string]interface{} `json:"request,omitempty"`
+	Source    *string                `json:"source,omitempty"`
+	Status    *string                `json:"status,omitempty"`
+	Timestamp *int                   `json:"timestamp,omitempty"`
+	Type      *string                `json:"type,omitempty"`
 }
 
 // OwnershipVerification defines model for OwnershipVerification.
@@ -697,10 +858,18 @@ type OwnershipVerification struct {
 
 // StopRequest defines model for StopRequest.
 type StopRequest struct {
-	Signal *string `json:"signal,omitempty"`
+	Signal  *StopRequestSignal `json:"signal,omitempty"`
+	Timeout *string            `json:"timeout,omitempty"`
+}
 
-	// Timeout A Go-style duration string (e.g. "10s", "5m", "1h30m").
-	Timeout *FlyDuration `json:"timeout,omitempty"`
+// StopRequestSignal defines model for StopRequest.Signal.
+type StopRequestSignal string
+
+// StrippedLease defines model for StrippedLease.
+type StrippedLease struct {
+	Description *string `json:"description,omitempty"`
+	ExpiresAt   *int    `json:"expires_at,omitempty"`
+	Owner       *string `json:"owner,omitempty"`
 }
 
 // UpdateMachineRequest defines model for UpdateMachineRequest.
@@ -709,7 +878,6 @@ type UpdateMachineRequest struct {
 	Config            *FlyMachineConfig `json:"config,omitempty"`
 	CurrentVersion    *string           `json:"current_version,omitempty"`
 	LeaseTtl          *int              `json:"lease_ttl,omitempty"`
-	Lsvd              *bool             `json:"lsvd,omitempty"`
 	MinSecretsVersion *int              `json:"min_secrets_version,omitempty"`
 
 	// Name Unique name for this Machine. If omitted, one is generated for you
@@ -749,11 +917,15 @@ type Volume struct {
 	SizeGb            *int              `json:"size_gb,omitempty"`
 	SnapshotRetention *int              `json:"snapshot_retention,omitempty"`
 	State             *string           `json:"state,omitempty"`
+	Type              *VolumeType       `json:"type,omitempty"`
 	Zone              *string           `json:"zone,omitempty"`
 }
 
 // VolumeHostStatus defines model for Volume.HostStatus.
 type VolumeHostStatus string
+
+// VolumeType defines model for Volume.Type.
+type VolumeType string
 
 // WaitMachineResponse defines model for WaitMachineResponse.
 type WaitMachineResponse struct {
@@ -769,7 +941,9 @@ type AssignIPRequest struct {
 	OrgSlug     *string `json:"org_slug,omitempty"`
 	Region      *string `json:"region,omitempty"`
 	ServiceName *string `json:"service_name,omitempty"`
-	Type        *string `json:"type,omitempty"`
+
+	// Type Type of IP address to allocate. "egress-pair" allocates both v4 and v6 egress IP addresses (recommended when using egress IPs).
+	Type *IPAssignmentType `json:"type,omitempty"`
 }
 
 // CreateAcmeCertificateRequest defines model for createAcmeCertificateRequest.
@@ -884,9 +1058,6 @@ type FlyDNSConfig struct {
 	SkipRegistration *bool               `json:"skip_registration,omitempty"`
 }
 
-// FlyDuration A Go-style duration string (e.g. "10s", "5m", "1h30m").
-type FlyDuration = string
-
 // FlyEnvFrom EnvVar defines an environment variable to be populated from a machine field, env_var
 type FlyEnvFrom struct {
 	// EnvVar EnvVar is required and is the name of the environment variable that will be set from the
@@ -961,18 +1132,23 @@ type FlyHTTPOptions struct {
 
 // FlyHTTPResponseOptions defines model for fly.HTTPResponseOptions.
 type FlyHTTPResponseOptions struct {
-	Headers  map[string]interface{} `json:"headers,omitempty"`
-	Pristine *bool                  `json:"pristine,omitempty"`
+	Headers  map[string]map[string]interface{} `json:"headers,omitempty"`
+	Pristine *bool                             `json:"pristine,omitempty"`
+}
+
+// FlyMachineCacheDrive defines model for fly.MachineCacheDrive.
+type FlyMachineCacheDrive struct {
+	SizeMb *int `json:"size_mb,omitempty"`
 }
 
 // FlyMachineCheck defines model for fly.MachineCheck.
 type FlyMachineCheck struct {
 	// GracePeriod The time to wait after a VM starts before checking its health
-	GracePeriod *FlyDuration           `json:"grace_period,omitempty"`
+	GracePeriod *string                `json:"grace_period,omitempty"`
 	Headers     []FlyMachineHTTPHeader `json:"headers,omitempty"`
 
 	// Interval The time between connectivity checks
-	Interval *FlyDuration `json:"interval,omitempty"`
+	Interval *string `json:"interval,omitempty"`
 
 	// Kind Kind of the check (informational, readiness)
 	Kind *FlyMachineCheckKind `json:"kind,omitempty"`
@@ -990,7 +1166,7 @@ type FlyMachineCheck struct {
 	Protocol *string `json:"protocol,omitempty"`
 
 	// Timeout The maximum time a connection can take before being reported as failing its health check
-	Timeout *FlyDuration `json:"timeout,omitempty"`
+	Timeout *string `json:"timeout,omitempty"`
 
 	// TlsServerName If the protocol is https, the hostname to use for TLS certificate validation
 	TlsServerName *string `json:"tls_server_name,omitempty"`
@@ -1008,7 +1184,8 @@ type FlyMachineCheckKind string
 // FlyMachineConfig defines model for fly.MachineConfig.
 type FlyMachineConfig struct {
 	// AutoDestroy Optional boolean telling the Machine to destroy itself once it’s complete (default false)
-	AutoDestroy *bool `json:"auto_destroy,omitempty"`
+	AutoDestroy *bool                 `json:"auto_destroy,omitempty"`
+	CacheDrive  *FlyMachineCacheDrive `json:"cache_drive,omitempty"`
 
 	// Checks An optional object that defines one or more named top-level checks. The key for each check is the check name.
 	Checks map[string]FlyMachineCheck `json:"checks,omitempty"`
@@ -1041,7 +1218,8 @@ type FlyMachineConfig struct {
 	Services []FlyMachineService `json:"services,omitempty"`
 
 	// Size Deprecated: use Guest instead
-	Size *string `json:"size,omitempty"`
+	Size *string         `json:"size,omitempty"`
+	Spot *FlyMachineSpot `json:"spot,omitempty"`
 
 	// Standbys Standbys enable a machine to be a standby for another. In the event of a hardware failure,
 	// the standby machine will be started.
@@ -1058,6 +1236,7 @@ type FlyMachineGuest struct {
 	Gpus             *int     `json:"gpus,omitempty"`
 	HostDedicationId *string  `json:"host_dedication_id,omitempty"`
 	KernelArgs       []string `json:"kernel_args,omitempty"`
+	MaxMemoryMb      *int     `json:"max_memory_mb,omitempty"`
 	MemoryMb         *int     `json:"memory_mb,omitempty"`
 
 	// PersistRootfs Deprecated: use MachineConfig.Rootfs instead
@@ -1161,9 +1340,8 @@ type FlyMachineRestartPolicy string
 
 // FlyMachineRootfs defines model for fly.MachineRootfs.
 type FlyMachineRootfs struct {
-	FsSizeGb *int                     `json:"fs_size_gb,omitempty"`
-	Persist  *FlyMachineRootfsPersist `json:"persist,omitempty"`
-	SizeGb   *int                     `json:"size_gb,omitempty"`
+	Persist *FlyMachineRootfsPersist `json:"persist,omitempty"`
+	SizeGb  *int                     `json:"size_gb,omitempty"`
 }
 
 // FlyMachineRootfsPersist defines model for FlyMachineRootfs.Persist.
@@ -1210,11 +1388,11 @@ type FlyMachineServiceAutostop string
 // FlyMachineServiceCheck defines model for fly.MachineServiceCheck.
 type FlyMachineServiceCheck struct {
 	// GracePeriod The time to wait after a VM starts before checking its health
-	GracePeriod *FlyDuration           `json:"grace_period,omitempty"`
+	GracePeriod *string                `json:"grace_period,omitempty"`
 	Headers     []FlyMachineHTTPHeader `json:"headers,omitempty"`
 
 	// Interval The time between connectivity checks
-	Interval *FlyDuration `json:"interval,omitempty"`
+	Interval *string `json:"interval,omitempty"`
 
 	// Method For http checks, the HTTP method to use to when making the request
 	Method *string `json:"method,omitempty"`
@@ -1229,7 +1407,7 @@ type FlyMachineServiceCheck struct {
 	Protocol *string `json:"protocol,omitempty"`
 
 	// Timeout The maximum time a connection can take before being reported as failing its health check
-	Timeout *FlyDuration `json:"timeout,omitempty"`
+	Timeout *string `json:"timeout,omitempty"`
 
 	// TlsServerName If the protocol is https, the hostname to use for TLS certificate validation
 	TlsServerName *string `json:"tls_server_name,omitempty"`
@@ -1246,6 +1424,12 @@ type FlyMachineServiceConcurrency struct {
 	HardLimit *int    `json:"hard_limit,omitempty"`
 	SoftLimit *int    `json:"soft_limit,omitempty"`
 	Type      *string `json:"type,omitempty"`
+}
+
+// FlyMachineSpot defines model for fly.MachineSpot.
+type FlyMachineSpot struct {
+	// MaxPriceFraction MaxPriceFraction is the maximum fraction of the full Machine price you will pay for this Machine. Range: (0, 1.0]
+	MaxPriceFraction *float32 `json:"max_price_fraction,omitempty"`
 }
 
 // FlyProxyProtoOptions defines model for fly.ProxyProtoOptions.
@@ -1279,11 +1463,12 @@ type FlyStatic struct {
 
 // FlyStopConfig defines model for fly.StopConfig.
 type FlyStopConfig struct {
-	Signal *string `json:"signal,omitempty"`
-
-	// Timeout A Go-style duration string (e.g. "10s", "5m", "1h30m").
-	Timeout *FlyDuration `json:"timeout,omitempty"`
+	Signal  *FlyStopConfigSignal `json:"signal,omitempty"`
+	Timeout *string              `json:"timeout,omitempty"`
 }
+
+// FlyStopConfigSignal defines model for FlyStopConfig.Signal.
+type FlyStopConfigSignal string
 
 // FlyTCPHealthcheck defines model for fly.TCPHealthcheck.
 type FlyTCPHealthcheck struct {
@@ -1354,6 +1539,9 @@ type MachinesListParams struct {
 	// IncludeDeleted Include deleted machines
 	IncludeDeleted *bool `form:"include_deleted,omitempty" json:"include_deleted,omitempty"`
 
+	// IncludeLeases Include machine leases
+	IncludeLeases *bool `form:"include_leases,omitempty" json:"include_leases,omitempty"`
+
 	// Region Region filter
 	Region *string `form:"region,omitempty" json:"region,omitempty"`
 
@@ -1362,12 +1550,21 @@ type MachinesListParams struct {
 
 	// Summary Only return summary info about machines (omit config, checks, events, host_status, nonce, etc.)
 	Summary *bool `form:"summary,omitempty" json:"summary,omitempty"`
+
+	// MetadataKey Filter by a machine metadata key and exact value. Replace {key} with the metadata key, for example metadata.foo=bar. Specify multiple metadata filters to require all matches.
+	MetadataKey *string `form:"metadata.{key},omitempty" json:"metadata.{key},omitempty"`
 }
 
 // MachinesDeleteParams defines parameters for MachinesDelete.
 type MachinesDeleteParams struct {
 	// Force Force kill the machine if it's running
 	Force *bool `form:"force,omitempty" json:"force,omitempty"`
+}
+
+// MachinesShowParams defines parameters for MachinesShow.
+type MachinesShowParams struct {
+	// IncludeLeases Include machine lease
+	IncludeLeases *bool `form:"include_leases,omitempty" json:"include_leases,omitempty"`
 }
 
 // MachinesListEventsParams defines parameters for MachinesListEvents.
@@ -1578,7 +1775,7 @@ type ClientInterface interface {
 	MachinesDelete(ctx context.Context, appName string, machineId string, params *MachinesDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// MachinesShow request
-	MachinesShow(ctx context.Context, appName string, machineId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	MachinesShow(ctx context.Context, appName string, machineId string, params *MachinesShowParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// MachinesUpdateWithBody request with any body
 	MachinesUpdateWithBody(ctx context.Context, appName string, machineId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1866,8 +2063,8 @@ func (c *Client) MachinesDelete(ctx context.Context, appName string, machineId s
 	return c.Client.Do(req)
 }
 
-func (c *Client) MachinesShow(ctx context.Context, appName string, machineId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewMachinesShowRequest(c.Server, appName, machineId)
+func (c *Client) MachinesShow(ctx context.Context, appName string, machineId string, params *MachinesShowParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewMachinesShowRequest(c.Server, appName, machineId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2139,7 +2336,7 @@ func NewAppsListRequest(server string, params *AppsListParams) (*http.Request, e
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps")
+	operationPath := fmt.Sprintf("/v1/apps")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2211,7 +2408,7 @@ func NewAppsCreateRequestWithBody(server string, contentType string, body io.Rea
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps")
+	operationPath := fmt.Sprintf("/v1/apps")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2247,7 +2444,7 @@ func NewAppsDeleteRequest(server string, appName string) (*http.Request, error) 
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s", pathParam0)
+	operationPath := fmt.Sprintf("/v1/apps/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2281,7 +2478,7 @@ func NewAppsShowRequest(server string, appName string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s", pathParam0)
+	operationPath := fmt.Sprintf("/v1/apps/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2315,7 +2512,7 @@ func NewAppCertificatesListRequest(server string, appName string, params *AppCer
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/certificates", pathParam0)
+	operationPath := fmt.Sprintf("/v1/apps/%s/certificates", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2414,7 +2611,7 @@ func NewAppCertificatesAcmeCreateRequestWithBody(server string, appName string, 
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/certificates/acme", pathParam0)
+	operationPath := fmt.Sprintf("/v1/apps/%s/certificates/acme", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2457,7 +2654,7 @@ func NewAppCertificatesDeleteRequest(server string, appName string, hostname str
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/certificates/%s", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/apps/%s/certificates/%s", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2498,7 +2695,7 @@ func NewAppCertificatesShowRequest(server string, appName string, hostname strin
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/certificates/%s", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/apps/%s/certificates/%s", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2539,7 +2736,7 @@ func NewAppCertificatesCheckRequest(server string, appName string, hostname stri
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/certificates/%s/check", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/apps/%s/certificates/%s/check", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2573,7 +2770,7 @@ func NewAppIPAssignmentsListRequest(server string, appName string) (*http.Reques
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/ip_assignments", pathParam0)
+	operationPath := fmt.Sprintf("/v1/apps/%s/ip_assignments", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2618,7 +2815,7 @@ func NewAppIPAssignmentsCreateRequestWithBody(server string, appName string, con
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/ip_assignments", pathParam0)
+	operationPath := fmt.Sprintf("/v1/apps/%s/ip_assignments", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2661,7 +2858,7 @@ func NewAppIPAssignmentsDeleteRequest(server string, appName string, ip string) 
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/ip_assignments/%s", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/apps/%s/ip_assignments/%s", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2695,7 +2892,7 @@ func NewMachinesListRequest(server string, appName string, params *MachinesListP
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/machines", pathParam0)
+	operationPath := fmt.Sprintf("/v1/apps/%s/machines", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2711,6 +2908,22 @@ func NewMachinesListRequest(server string, appName string, params *MachinesListP
 		if params.IncludeDeleted != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "include_deleted", *params.IncludeDeleted, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.IncludeLeases != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "include_leases", *params.IncludeLeases, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -2772,6 +2985,22 @@ func NewMachinesListRequest(server string, appName string, params *MachinesListP
 
 		}
 
+		if params.MetadataKey != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "metadata.{key}", *params.MetadataKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -2810,7 +3039,7 @@ func NewMachinesCreateRequestWithBody(server string, appName string, contentType
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/machines", pathParam0)
+	operationPath := fmt.Sprintf("/v1/apps/%s/machines", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2853,7 +3082,7 @@ func NewMachinesDeleteRequest(server string, appName string, machineId string, p
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/machines/%s", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/apps/%s/machines/%s", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2894,7 +3123,7 @@ func NewMachinesDeleteRequest(server string, appName string, machineId string, p
 }
 
 // NewMachinesShowRequest generates requests for MachinesShow
-func NewMachinesShowRequest(server string, appName string, machineId string) (*http.Request, error) {
+func NewMachinesShowRequest(server string, appName string, machineId string, params *MachinesShowParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -2916,7 +3145,7 @@ func NewMachinesShowRequest(server string, appName string, machineId string) (*h
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/machines/%s", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/apps/%s/machines/%s", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -2924,6 +3153,28 @@ func NewMachinesShowRequest(server string, appName string, machineId string) (*h
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.IncludeLeases != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "include_leases", *params.IncludeLeases, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -2968,7 +3219,7 @@ func NewMachinesUpdateRequestWithBody(server string, appName string, machineId s
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/machines/%s", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/apps/%s/machines/%s", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -3011,7 +3262,7 @@ func NewMachinesListEventsRequest(server string, appName string, machineId strin
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/machines/%s/events", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/apps/%s/machines/%s/events", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -3074,7 +3325,7 @@ func NewMachinesStartRequest(server string, appName string, machineId string) (*
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/machines/%s/start", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/apps/%s/machines/%s/start", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -3126,7 +3377,7 @@ func NewMachinesStopRequestWithBody(server string, appName string, machineId str
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/machines/%s/stop", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/apps/%s/machines/%s/stop", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -3169,7 +3420,7 @@ func NewMachinesWaitRequest(server string, appName string, machineId string, par
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/machines/%s/wait", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/apps/%s/machines/%s/wait", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -3289,7 +3540,7 @@ func NewSecretsListRequest(server string, appName string, params *SecretsListPar
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/secrets", pathParam0)
+	operationPath := fmt.Sprintf("/v1/apps/%s/secrets", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -3372,7 +3623,7 @@ func NewSecretsUpdateRequestWithBody(server string, appName string, contentType 
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/secrets", pathParam0)
+	operationPath := fmt.Sprintf("/v1/apps/%s/secrets", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -3415,7 +3666,7 @@ func NewSecretDeleteRequest(server string, appName string, secretName string) (*
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/secrets/%s", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/apps/%s/secrets/%s", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -3456,7 +3707,7 @@ func NewSecretGetRequest(server string, appName string, secretName string, param
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/secrets/%s", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/apps/%s/secrets/%s", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -3528,7 +3779,7 @@ func NewVolumesListRequest(server string, appName string, params *VolumesListPar
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/volumes", pathParam0)
+	operationPath := fmt.Sprintf("/v1/apps/%s/volumes", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -3595,7 +3846,7 @@ func NewVolumesCreateRequestWithBody(server string, appName string, contentType 
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/volumes", pathParam0)
+	operationPath := fmt.Sprintf("/v1/apps/%s/volumes", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -3638,7 +3889,7 @@ func NewVolumeDeleteRequest(server string, appName string, volumeId string) (*ht
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/volumes/%s", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/apps/%s/volumes/%s", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -3679,7 +3930,7 @@ func NewVolumesGetByIdRequest(server string, appName string, volumeId string) (*
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/volumes/%s", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/apps/%s/volumes/%s", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -3731,7 +3982,7 @@ func NewVolumesUpdateRequestWithBody(server string, appName string, volumeId str
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/volumes/%s", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/apps/%s/volumes/%s", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -3785,7 +4036,7 @@ func NewVolumesExtendRequestWithBody(server string, appName string, volumeId str
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/apps/%s/volumes/%s/extend", pathParam0, pathParam1)
+	operationPath := fmt.Sprintf("/v1/apps/%s/volumes/%s/extend", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -3902,7 +4153,7 @@ type ClientWithResponsesInterface interface {
 	MachinesDeleteWithResponse(ctx context.Context, appName string, machineId string, params *MachinesDeleteParams, reqEditors ...RequestEditorFn) (*MachinesDeleteResponse, error)
 
 	// MachinesShowWithResponse request
-	MachinesShowWithResponse(ctx context.Context, appName string, machineId string, reqEditors ...RequestEditorFn) (*MachinesShowResponse, error)
+	MachinesShowWithResponse(ctx context.Context, appName string, machineId string, params *MachinesShowParams, reqEditors ...RequestEditorFn) (*MachinesShowResponse, error)
 
 	// MachinesUpdateWithBodyWithResponse request with any body
 	MachinesUpdateWithBodyWithResponse(ctx context.Context, appName string, machineId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*MachinesUpdateResponse, error)
@@ -3988,6 +4239,7 @@ type AppsCreateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON400      *ErrorResponse
+	JSON422      *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -4184,7 +4436,7 @@ func (r AppIPAssignmentsListResponse) StatusCode() int {
 type AppIPAssignmentsCreateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *IPAssignment
+	JSON200      *AssignIPResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -4812,8 +5064,8 @@ func (c *ClientWithResponses) MachinesDeleteWithResponse(ctx context.Context, ap
 }
 
 // MachinesShowWithResponse request returning *MachinesShowResponse
-func (c *ClientWithResponses) MachinesShowWithResponse(ctx context.Context, appName string, machineId string, reqEditors ...RequestEditorFn) (*MachinesShowResponse, error) {
-	rsp, err := c.MachinesShow(ctx, appName, machineId, reqEditors...)
+func (c *ClientWithResponses) MachinesShowWithResponse(ctx context.Context, appName string, machineId string, params *MachinesShowParams, reqEditors ...RequestEditorFn) (*MachinesShowResponse, error) {
+	rsp, err := c.MachinesShow(ctx, appName, machineId, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -5050,6 +5302,13 @@ func ParseAppsCreateResponse(rsp *http.Response) (*AppsCreateResponse, error) {
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
 	}
 
 	return response, nil
@@ -5265,7 +5524,7 @@ func ParseAppIPAssignmentsCreateResponse(rsp *http.Response) (*AppIPAssignmentsC
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest IPAssignment
+		var dest AssignIPResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

@@ -71,7 +71,7 @@ func (p *FlyProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *
 				Required:    true,
 			},
 			"base_url": schema.StringAttribute{
-				Description: "Override the Machines API base URL.",
+				Description: "Override the Machines API server URL, without the `/v1` path — e.g. `http://_api.internal:4280` from inside a Fly machine. Defaults to `https://api.machines.dev`.",
 				Optional:    true,
 			},
 		},

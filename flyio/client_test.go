@@ -27,7 +27,7 @@ func newTestClient(t *testing.T, opts ...Option) *Client {
 
 func TestCreateApp(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/apps" {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/apps" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
@@ -87,7 +87,7 @@ func TestCreateAppIdempotent(t *testing.T) {
 
 func TestDeleteApp(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete || r.URL.Path != "/apps/ampbase-org-abc" {
+		if r.Method != http.MethodDelete || r.URL.Path != "/v1/apps/ampbase-org-abc" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 		w.WriteHeader(http.StatusAccepted)
@@ -117,7 +117,7 @@ func TestCreateMachine(t *testing.T) {
 		if r.Method != http.MethodPost {
 			t.Errorf("method = %s, want POST", r.Method)
 		}
-		if r.URL.Path != "/apps/ampbase-org-abc/machines" {
+		if r.URL.Path != "/v1/apps/ampbase-org-abc/machines" {
 			t.Errorf("path = %s", r.URL.Path)
 		}
 		var body struct {
@@ -361,7 +361,7 @@ func TestUpdateMachineNoRetryOn4xx(t *testing.T) {
 
 func TestAllocateFlycast(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/apps/ampbase-org-abc/ip_assignments" {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/apps/ampbase-org-abc/ip_assignments" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 		var body map[string]string
@@ -396,7 +396,7 @@ func TestAllocateFlycast(t *testing.T) {
 // names the peer Fly org granted reach to the allocated IP.
 func TestAllocateFlycastCrossOrg(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/apps/ampbase-vault/ip_assignments" {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/apps/ampbase-vault/ip_assignments" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 		var body map[string]string
@@ -433,7 +433,7 @@ func TestAllocateFlycastCrossOrg(t *testing.T) {
 // allocated today within the control-plane Fly org.
 func TestAllocateFlycastNetworkOnly(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/apps/ampbase-vault/ip_assignments" {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/apps/ampbase-vault/ip_assignments" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 		var body map[string]string
@@ -584,7 +584,7 @@ func TestAllocateFlycastNoRetryOn4xx(t *testing.T) {
 
 func TestSetSecrets(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/apps/ampbase-org-abc/secrets" {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/apps/ampbase-org-abc/secrets" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 		var body struct {
@@ -622,7 +622,7 @@ func TestSetSecrets(t *testing.T) {
 
 func TestDeleteSecret(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete || r.URL.Path != "/apps/ampbase-org-abc/secrets/AWS_ACCESS_KEY_ID" {
+		if r.Method != http.MethodDelete || r.URL.Path != "/v1/apps/ampbase-org-abc/secrets/AWS_ACCESS_KEY_ID" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -649,7 +649,7 @@ func TestDeleteSecretIdempotent(t *testing.T) {
 
 func TestListMachines(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/apps/ampbase-org-abc/machines" {
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/apps/ampbase-org-abc/machines" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 		w.WriteHeader(http.StatusOK)
@@ -698,7 +698,7 @@ func TestListMachinesEmpty(t *testing.T) {
 
 func TestGetMachine(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/apps/ampbase-org-abc/machines/mach-1" {
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/apps/ampbase-org-abc/machines/mach-1" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 		w.WriteHeader(http.StatusOK)
@@ -744,7 +744,7 @@ func TestGetMachine_PopulatesMounts(t *testing.T) {
 
 func TestDestroyMachine(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete || r.URL.Path != "/apps/ampbase-org-abc/machines/mach-1" {
+		if r.Method != http.MethodDelete || r.URL.Path != "/v1/apps/ampbase-org-abc/machines/mach-1" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 		if r.URL.Query().Get("force") != "true" {
@@ -789,7 +789,7 @@ func TestDestroyMachineNoForce(t *testing.T) {
 
 func TestWaitForState(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/apps/ampbase-org-abc/machines/mach-1/wait" {
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/apps/ampbase-org-abc/machines/mach-1/wait" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 		if r.URL.Query().Get("state") != "started" {
@@ -1040,7 +1040,7 @@ func TestIsNotFoundFalseFor500(t *testing.T) {
 // terraform refresh on existing org state.
 func TestListIPAssignments(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/apps/ampbase-org-abc/ip_assignments" {
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/apps/ampbase-org-abc/ip_assignments" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -1082,7 +1082,7 @@ func TestListIPAssignmentsEmpty(t *testing.T) {
 // TestListIPAssignments. Same regression class.
 func TestListSecrets(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/apps/ampbase-org-abc/secrets" {
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/apps/ampbase-org-abc/secrets" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -1298,7 +1298,7 @@ func TestWaitForChecksTimeout(t *testing.T) {
 // on this for the ClickHouse Keeper and replica volumes.
 func TestCreateVolume(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/apps/ampbase-keeper-staging/volumes" {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/apps/ampbase-keeper-staging/volumes" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 		var body struct {
@@ -1405,7 +1405,7 @@ func TestGetVolumeNotFound(t *testing.T) {
 // surfaced as the returned VolumeInfo.
 func TestExtendVolume(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPut || r.URL.Path != "/apps/app/volumes/vol_abc/extend" {
+		if r.Method != http.MethodPut || r.URL.Path != "/v1/apps/app/volumes/vol_abc/extend" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 		var body struct {
@@ -1490,7 +1490,7 @@ func TestAllocateIPPublicTypes(t *testing.T) {
 // downstream Cloudflare DNS records without a second tofu apply.
 func TestCreateAcmeCertificate(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/apps/ampbase-amp-staging/certificates/acme" {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/apps/ampbase-amp-staging/certificates/acme" {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 		var body struct {

@@ -19,7 +19,10 @@ import (
 	"github.com/ampbase-io/terraform-provider-fly/flyio/machines"
 )
 
-const defaultBaseURL = "https://api.machines.dev/v1"
+// defaultBaseURL is the Machines API server. Operation paths carry the
+// /v1 prefix themselves, as Fly's OpenAPI document declares them, so a
+// base URL never includes it.
+const defaultBaseURL = "https://api.machines.dev"
 
 // Type aliases re-export generated types so callers import only "flyio".
 type (
@@ -95,7 +98,8 @@ func WithToken(token string) Option {
 	return func(c *config) { c.token = token }
 }
 
-// WithBaseURL overrides the default Machines API base URL.
+// WithBaseURL overrides the Machines API server URL. Without the /v1 path:
+// from inside a Fly machine, http://_api.internal:4280.
 func WithBaseURL(url string) Option {
 	return func(c *config) { c.baseURL = url }
 }
@@ -360,7 +364,7 @@ func apiIPType(providerType string) string {
 //
 // Same 5xx retry contract as AllocateFlycast.
 func (c *Client) AllocateIP(ctx context.Context, appName, ipType, network, peerOrgSlug string) (string, error) {
-	body := machines.AssignIPRequest{Type: new(apiIPType(ipType))}
+	body := machines.AssignIPRequest{Type: new(machines.IPAssignmentType(apiIPType(ipType)))}
 	if network != "" {
 		body.Network = new(network)
 	}
@@ -675,7 +679,7 @@ func isManifestUnknown(err error) bool {
 }
 
 func (c *Client) getMachineRaw(ctx context.Context, appName, machineID string) (*machines.Machine, error) {
-	resp, err := c.gen.MachinesShow(ctx, appName, machineID)
+	resp, err := c.gen.MachinesShow(ctx, appName, machineID, nil)
 	if err != nil {
 		return nil, err
 	}

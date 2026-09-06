@@ -40,7 +40,7 @@ func (f *appsFake) handle(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	switch {
-	case r.Method == http.MethodPost && r.URL.Path == "/apps":
+	case r.Method == http.MethodPost && r.URL.Path == "/v1/apps":
 		var body map[string]string
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeErr(w, http.StatusBadRequest, "decode create body")
@@ -48,8 +48,8 @@ func (f *appsFake) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		f.apps[body["name"]] = body
 		w.WriteHeader(http.StatusCreated)
-	case r.Method == http.MethodGet && len(r.URL.Path) > len("/apps/"):
-		app, ok := f.apps[r.URL.Path[len("/apps/"):]]
+	case r.Method == http.MethodGet && len(r.URL.Path) > len("/v1/apps/"):
+		app, ok := f.apps[r.URL.Path[len("/v1/apps/"):]]
 		if !ok {
 			http.NotFound(w, r)
 			return
