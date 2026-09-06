@@ -1,0 +1,43 @@
+name: spec-refresh
+
+# Refreshes the Machines API document from Fly and regenerates the client
+# and docs, opening a PR when anything changed. Weekly, and on demand.
+#
+# A PR opened with GITHUB_TOKEN does not trigger the ci workflow on its own;
+# close and reopen it, or push an empty commit, to get a run.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+      - name: Refresh the spec and regenerate
+        run: |
+          go run ./hack/spec
+          go generate ./...
+          go build ./...
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: spec-refresh
+          title: "machines: refresh the Machines API spec"
+          commit-message: "machines: refresh the Machines API spec"
+          body: |
+            Automated refresh of `flyio/machines/fly-machines.openapi3.json`
+            from https://docs.machines.dev/openapi.json, with the client and
+            docs regenerated. Review the `gen.go` diff for shape changes on
+            the types the resources use before merging.
+          labels: spec-refresh
