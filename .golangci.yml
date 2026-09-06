@@ -1,0 +1,36 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - gocritic
+    - revive
+    - sloglint
+  settings:
+    sloglint:
+      attr-only: true
+    revive:
+      rules:
+        - name: early-return
+          severity: error
+        - name: if-return
+          severity: error
+        - name: superfluous-else
+          severity: error
+  exclusions:
+    paths:
+      - flyio/machines/gen.go
+
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    paths:
+      - flyio/machines/gen.go

@@ -1,0 +1,39 @@
+package: machines
+output: gen.go
+generate:
+  client: true
+  models: true
+output-options:
+  prefer-skip-optional-pointer-on-container-types: true
+  include-operation-ids:
+    - Apps_list
+    - Apps_create
+    - Apps_show
+    - Apps_delete
+    - Machines_create
+    - Machines_update
+    - Machines_list
+    - Machines_show
+    - Machines_delete
+    - Machines_start
+    - Machines_stop
+    - Machines_wait
+    - Machines_list_events
+    - App_IPAssignments_list
+    - App_IPAssignments_create
+    - App_IPAssignments_delete
+    - Secrets_list
+    - Secrets_update
+    - Secret_get
+    - Secret_delete
+    - Volumes_list
+    - Volumes_create
+    - Volumes_get_by_id
+    - Volumes_update
+    - Volume_delete
+    - Volumes_extend
+    - App_Certificates_list
+    - App_Certificates_acme_create
+    - App_Certificates_show
+    - App_Certificates_delete
+    - App_Certificates_check

@@ -1,0 +1,6 @@
+terraform-provider-fly
+
+flyio/machines/fly-machines.openapi3.json is the Fly.io Machines API OpenAPI
+specification, published by Fly.io under the Apache License, Version 2.0
+(http://www.apache.org/licenses/LICENSE-2.0). flyio/machines/gen.go is
+generated from it by oapi-codegen.
