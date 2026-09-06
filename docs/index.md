@@ -29,4 +29,4 @@ provider "fly" {
 ### Optional
 
 - `api_token` (String, Sensitive) Fly.io API token. Defaults to the FLY_API_TOKEN environment variable.
-- `base_url` (String) Override the Machines API base URL.
+- `base_url` (String) Override the Machines API server URL, without the `/v1` path — e.g. `http://_api.internal:4280` from inside a Fly machine. Defaults to `https://api.machines.dev`.

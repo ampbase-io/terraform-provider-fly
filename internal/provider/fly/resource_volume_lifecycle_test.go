@@ -53,7 +53,7 @@ func (f *volumesFake) resource(t *testing.T) *volumeResource {
 }
 
 func (f *volumesFake) handle(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1"), "/"), "/")
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	switch {

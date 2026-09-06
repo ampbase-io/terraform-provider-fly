@@ -171,9 +171,9 @@ func TestValidateMountsUnattached(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 		switch r.URL.Path {
-		case "/apps/app/volumes/vol_free":
+		case "/v1/apps/app/volumes/vol_free":
 			_, _ = w.Write([]byte(`{"id":"vol_free","state":"created","attached_machine_id":""}`))
-		case "/apps/app/volumes/vol_taken":
+		case "/v1/apps/app/volumes/vol_taken":
 			_, _ = w.Write([]byte(`{"id":"vol_taken","state":"created","attached_machine_id":"mach_existing"}`))
 		default:
 			http.NotFound(w, r)
@@ -929,13 +929,13 @@ func TestBuildMachineInput_Checks(t *testing.T) {
 		if c.Port == nil || *c.Port != 9181 {
 			t.Errorf("port = %v, want 9181", c.Port)
 		}
-		if c.Interval == nil || *c.Interval != machines.FlyDuration("10s") {
+		if c.Interval == nil || *c.Interval != "10s" {
 			t.Errorf("interval = %v, want 10s", c.Interval)
 		}
-		if c.Timeout == nil || *c.Timeout != machines.FlyDuration("5s") {
+		if c.Timeout == nil || *c.Timeout != "5s" {
 			t.Errorf("timeout = %v, want 5s", c.Timeout)
 		}
-		if c.GracePeriod == nil || *c.GracePeriod != machines.FlyDuration("20s") {
+		if c.GracePeriod == nil || *c.GracePeriod != "20s" {
 			t.Errorf("grace_period = %v, want 20s", c.GracePeriod)
 		}
 	}

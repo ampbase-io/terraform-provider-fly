@@ -102,8 +102,24 @@ use. `flyio/machines` is generated from Fly's OpenAPI specification with
 ```sh
 go build ./...
 go test ./...
-go generate ./...   # regenerates docs/ from the schemas and examples/
+go generate ./...   # regenerates the Machines client and docs/ — offline, CI diffs the result
 ```
+
+### Refreshing the Machines API spec
+
+`flyio/machines/fly-machines.openapi3.json` is Fly's published document with
+one correction applied, and the client is generated from it. To pull a new
+upstream version:
+
+```sh
+go run ./hack/spec && go generate ./...
+```
+
+`hack/spec` downloads `https://docs.machines.dev/openapi.json`, drops the
+`Version` properties that duplicate `version` on the secrets responses (the
+generated client would otherwise fail to compile), and writes the document
+with sorted keys so a rerun against unchanged upstream is a no-op. The
+`spec-refresh` workflow runs this weekly and opens a PR when anything moved.
 
 Run the provider with `-debug` to attach a CLI via the `TF_REATTACH_PROVIDERS`
 line it prints.

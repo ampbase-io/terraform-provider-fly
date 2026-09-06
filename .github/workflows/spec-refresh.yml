@@ -1,0 +1,64 @@
+name: spec-refresh
+
+# Refreshes the Machines API document from Fly and regenerates the client
+# and docs, opening a PR when anything changed. Weekly, and on demand.
+#
+# A PR opened with GITHUB_TOKEN does not trigger the ci workflow's
+# pull_request event, so the last step dispatches ci on the branch instead:
+# workflow_dispatch runs are the one kind GITHUB_TOKEN may start, and their
+# checks attach to the branch head the PR shows.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+      - name: Refresh the spec and regenerate
+        run: |
+          go run ./hack/spec
+          go generate ./...
+          go build ./...
+      - name: Open or update the PR, then run ci on its branch
+        # gh is GitHub's own and preinstalled on the runner, so this needs no
+        # third-party action holding contents: write. The branch is the bot's
+        # to force-push; the PR is created once and the push updates it.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "upstream unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C spec-refresh
+          git add -A
+          git commit -m "machines: refresh the Machines API spec"
+          git push --force origin spec-refresh
+          if [ "$(gh pr list --head spec-refresh --state open --json number --jq length)" = "0" ]; then
+            gh pr create --base main --head spec-refresh \
+              --title "machines: refresh the Machines API spec" \
+              --body "$(cat <<'BODY'
+          Automated refresh of `flyio/machines/fly-machines.openapi3.json`
+          from https://docs.machines.dev/openapi.json, with the client and
+          docs regenerated. Review the `gen.go` diff for shape changes on
+          the types the resources use before merging.
+          BODY
+          )"
+          fi
+          gh workflow run ci.yml --ref spec-refresh

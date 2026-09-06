@@ -3,6 +3,10 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Dispatched by spec-refresh on the branch it opens a PR from: a PR created
+  # with GITHUB_TOKEN does not trigger pull_request, but a dispatch always
+  # creates a run, and its checks attach to the branch head the PR shows.
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:

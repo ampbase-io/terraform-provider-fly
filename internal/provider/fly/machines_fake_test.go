@@ -220,7 +220,7 @@ func (f *machinesFake) actionFollowsSettle() bool {
 }
 
 func (f *machinesFake) handle(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1"), "/"), "/")
 	f.record(r)
 
 	// Routes: /apps/{app}/machines[/{id}[/{action}]] and /apps/{app}/volumes/{id}
@@ -243,7 +243,7 @@ func (f *machinesFake) record(r *http.Request) {
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, fakeCall{
 		Method: r.Method,
-		Path:   strings.TrimRight(r.URL.Path, "/"),
+		Path:   strings.TrimRight(strings.TrimPrefix(r.URL.Path, "/v1"), "/"),
 		State:  r.URL.Query().Get("state"),
 	})
 }
