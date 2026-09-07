@@ -1,0 +1,17 @@
+<clickhouse>
+  <keeper_server>
+    <tcp_port>9181</tcp_port>
+    <server_id>${server_id}</server_id>
+    <log_storage_path>/var/lib/clickhouse-keeper/log</log_storage_path>
+    <snapshot_storage_path>/var/lib/clickhouse-keeper/snapshots</snapshot_storage_path>
+    <raft_configuration>
+%{ for peer in peers ~}
+      <server>
+        <id>${peer.id}</id>
+        <hostname>${peer.host}</hostname>
+        <port>9234</port>
+      </server>
+%{ endfor ~}
+    </raft_configuration>
+  </keeper_server>
+</clickhouse>

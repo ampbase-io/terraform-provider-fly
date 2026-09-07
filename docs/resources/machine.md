@@ -65,17 +65,17 @@ resource "fly_machine" "web" {
 ### Required
 
 - `app` (String) Application name the machine belongs to.
-- `image` (String) Docker image to run.
+- `image` (String) Docker image to run. Ignored by Fly once any `container` block is declared, but still required; set it to the main container's image.
 
 ### Optional
 
 - `check` (Block List) Machine-level health checks (the Machines API's `config.checks`). Create and Update block until every check reports `passing`, so a check here serializes a rolling apply: the next machine is not touched until this one is healthy. Use for machines that publish no `service` — a service's own `check` block is the right place otherwise, since it additionally gates Fly Proxy routing. (see [below for nested schema](#nestedblock--check))
-- `container` (Block List) Additional container to co-run with the machine's main image (sidecar pattern). When at least one `container` block is declared, Fly's Machines API runs the top-level `image` as the first container and each `container` block as an additional container sharing the same firecracker microVM, network namespace, and `/.fly/api` socket.
+- `container` (Block List) A container to run on the machine. With no `container` blocks the machine runs the top-level `image` with the top-level `env` and `file`s. Once any `container` block is declared, Fly ignores those three top-level fields entirely, so the main service must be declared as a container too; keep the top-level `image` set (the schema requires it) to the main service's image. Every container shares the same firecracker microVM, network namespace, and `/.fly/api` socket.
 
 Use this for tightly-coupled co-processes (e.g. an OTel Collector that scrapes the main service on `127.0.0.1`). Fly OIDC identity is per-machine, not per-container — every container on a machine is the same principal upstream. Never use a sidecar as an auth boundary. (see [below for nested schema](#nestedblock--container))
 - `desired_state` (String) State to converge the machine to after create/update: "started" (default) starts the machine and waits for checks; "stopped" stops it and skips check waits. Null behaves as "started". Use "stopped" to park a machine that has no services for Fly Proxy to manage.
-- `env` (Map of String) Environment variables.
-- `file` (Block List) Per-machine file written into the guest at create/update time. Exactly one of `raw_value` or `secret_name` must be set. This is how a cluster ships per-machine config (a Raft peer list, a node ID) without baking it into the image. (see [below for nested schema](#nestedblock--file))
+- `env` (Map of String) Environment variables. Ignored by Fly once any `container` block is declared; set `env` on the container instead.
+- `file` (Block List) Per-machine file written into the guest at create/update time. Exactly one of `raw_value` or `secret_name` must be set. This is how a cluster ships per-machine config (a Raft peer list, a node ID) without baking it into the image. Ignored by Fly once any `container` block is declared; use the container's `file` blocks instead. (see [below for nested schema](#nestedblock--file))
 - `guest` (Block, Optional) Machine size configuration. (see [below for nested schema](#nestedblock--guest))
 - `health_check_timeout` (String) Maximum time to wait for the health check (Go duration, default "60s").
 - `health_check_url` (String) URL to poll after creation (e.g. "http://app.flycast:8081/health"). Machine is not marked created until this returns 200.

@@ -1,0 +1,16 @@
+ui       = true
+api_addr = "${api_addr}"
+
+listener "tcp" {
+  address     = "0.0.0.0:8200"
+  tls_disable = true
+}
+
+# Shared object storage, so a replacement machine joins the same cluster;
+# the machine's identity authenticates it.
+storage "gcs" {
+  bucket     = "${bucket}"
+  ha_enabled = "true"
+}
+
+plugin_directory = "/vault/plugins"

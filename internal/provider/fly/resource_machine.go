@@ -230,13 +230,12 @@ type guestModel struct {
 // containers, so a sidecar is the SAME principal to upstream services as
 // its host.
 //
-// The top-level `image` and any top-level `file`/`env` blocks become
-// the implicit "app" container — the existing single-container shape
-// is unchanged when no `container` blocks are declared. When one or
-// more `container` blocks ARE declared, callers should leave the
-// machine's top-level `image` set to the main service's image (Fly
-// uses it as the first container) and add explicit `container` blocks
-// for each sidecar.
+// With no `container` blocks the machine runs the top-level `image`
+// with the top-level `env` and `file`s: the single-container shape. Once
+// any `container` block is declared, Fly ignores all three top-level
+// fields — measured, not documented — so the main service has to be
+// declared as a container too, and the top-level `image` stays only
+// because the schema requires one.
 type containerModel struct {
 	Name        types.String                `tfsdk:"name"`
 	Image       types.String                `tfsdk:"image"`
@@ -378,11 +377,11 @@ func (r *machineResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				},
 			},
 			"image": schema.StringAttribute{
-				Description: "Docker image to run.",
+				Description: "Docker image to run. Ignored by Fly once any `container` block is declared, but still required; set it to the main container's image.",
 				Required:    true,
 			},
 			"env": schema.MapAttribute{
-				Description: "Environment variables.",
+				Description: "Environment variables. Ignored by Fly once any `container` block is declared; set `env` on the container instead.",
 				Optional:    true,
 				ElementType: types.StringType,
 			},
@@ -556,7 +555,7 @@ func (r *machineResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				},
 			},
 			"file": schema.ListNestedBlock{
-				Description: "Per-machine file written into the guest at create/update time. Exactly one of `raw_value` or `secret_name` must be set. This is how a cluster ships per-machine config (a Raft peer list, a node ID) without baking it into the image.",
+				Description: "Per-machine file written into the guest at create/update time. Exactly one of `raw_value` or `secret_name` must be set. This is how a cluster ships per-machine config (a Raft peer list, a node ID) without baking it into the image. Ignored by Fly once any `container` block is declared; use the container's `file` blocks instead.",
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{
 						"guest_path": schema.StringAttribute{
@@ -628,7 +627,7 @@ func (r *machineResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 				},
 			},
 			"container": schema.ListNestedBlock{
-				Description: "Additional container to co-run with the machine's main image (sidecar pattern). When at least one `container` block is declared, Fly's Machines API runs the top-level `image` as the first container and each `container` block as an additional container sharing the same firecracker microVM, network namespace, and `/.fly/api` socket.\n\n" +
+				Description: "A container to run on the machine. With no `container` blocks the machine runs the top-level `image` with the top-level `env` and `file`s. Once any `container` block is declared, Fly ignores those three top-level fields entirely, so the main service must be declared as a container too; keep the top-level `image` set (the schema requires it) to the main service's image. Every container shares the same firecracker microVM, network namespace, and `/.fly/api` socket.\n\n" +
 					"Use this for tightly-coupled co-processes (e.g. an OTel Collector that scrapes the main service on `127.0.0.1`). Fly OIDC identity is per-machine, not per-container — every container on a machine is the same principal upstream. Never use a sidecar as an auth boundary.",
 				NestedObject: schema.NestedBlockObject{
 					Attributes: map[string]schema.Attribute{

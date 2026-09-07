@@ -1,0 +1,8 @@
+#!/bin/sh
+# Fetches the machine's OIDC token from Fly's per-machine API socket, so
+# Vault (and the registrar) can authenticate as this machine without a
+# static credential in the image or the config.
+exec curl -sSf --unix-socket /.fly/api -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"aud":"'"$1"'"}' \
+  http://localhost/v1/tokens/oidc

@@ -1,0 +1,22 @@
+<clickhouse>
+  <remote_servers>
+    <${cluster}>
+      <shard>
+%{ for host in replicas ~}
+        <replica>
+          <host>${host}</host>
+          <port>9000</port>
+        </replica>
+%{ endfor ~}
+      </shard>
+    </${cluster}>
+  </remote_servers>
+  <zookeeper>
+%{ for peer in keepers ~}
+    <node>
+      <host>${peer.host}</host>
+      <port>9181</port>
+    </node>
+%{ endfor ~}
+  </zookeeper>
+</clickhouse>

@@ -1,0 +1,11 @@
+#!/bin/sh
+# Readiness for the registrar: exit 0 only when a write issued here would
+# reach a node that has finished post-unseal setup — this node is active,
+# or it is a standby that knows the active node's address.
+set -eu
+leader=$(curl -sSf http://127.0.0.1:8200/v1/sys/leader)
+case "$leader" in
+  *'"is_self":true'*) exit 0 ;;
+  *'"leader_address":"http'*) exit 0 ;;
+  *) exit 1 ;;
+esac
