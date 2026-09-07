@@ -42,6 +42,7 @@ jobs:
   # Every directory under examples/ that is a root module is validated against
   # the provider built from this commit, through a dev override, so an example
   # that drifts from the schema fails here rather than in a reader's terminal.
+  # The override is keyed on the address tofu resolves the short source to.
   examples:
     runs-on: ubuntu-latest
     steps:
@@ -60,7 +61,7 @@ jobs:
           cat > "$RUNNER_TEMP/tofurc" <<EOF
           provider_installation {
             dev_overrides {
-              "registry.terraform.io/ampbase-io/fly" = "$RUNNER_TEMP/provider"
+              "registry.opentofu.org/ampbase-io/fly" = "$RUNNER_TEMP/provider"
             }
             direct {}
           }

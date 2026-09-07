@@ -29,7 +29,7 @@ terraform {
   required_providers {
     fly = {
       source  = "ampbase-io/fly"
-      version = "~> 0.1"
+      version = "~> 0.2"
     }
   }
 }
