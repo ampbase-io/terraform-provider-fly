@@ -6,7 +6,7 @@
 terraform {
   required_providers {
     fly = {
-      source  = "registry.terraform.io/ampbase-io/fly"
+      source  = "ampbase-io/fly"
       version = "~> 0.2"
     }
     cloudflare = {
