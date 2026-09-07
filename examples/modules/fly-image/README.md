@@ -6,4 +6,4 @@ run it. The label is a content hash of the files that go into the image, so
 an apply rebuilds exactly when something that matters changed, and a
 `fly_machine` that takes the module's `ref` waits for the push.
 
-Used by [`../vault`](../vault/).
+Used by [`../cluster`](../cluster/) and [`../vault`](../vault/).

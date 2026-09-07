@@ -26,16 +26,6 @@ variable "clickhouse_replicas" {
   default = 2
 }
 
-variable "keeper_image" {
-  type    = string
-  default = "clickhouse/clickhouse-keeper:latest"
-}
-
-variable "clickhouse_image" {
-  type    = string
-  default = "clickhouse/clickhouse-server:latest"
-}
-
 variable "otelcol_image" {
   type    = string
   default = "otel/opentelemetry-collector-contrib:latest"

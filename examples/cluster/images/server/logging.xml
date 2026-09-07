@@ -1,0 +1,13 @@
+<!--
+  Log to stdout as well, so Fly's log stream carries the server's logs;
+  upstream writes only to files inside the container, which nothing reads
+  and which vanish on restart. The level is set explicitly because
+  upstream's default is trace, which on a busy cluster buries everything
+  else under MergeTree bookkeeping.
+-->
+<clickhouse>
+  <logger>
+    <console>1</console>
+    <level>information</level>
+  </logger>
+</clickhouse>

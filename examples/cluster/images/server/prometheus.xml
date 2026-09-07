@@ -1,0 +1,16 @@
+<!--
+  ClickHouse's built-in Prometheus endpoint on :9363, for the sidecar on
+  the same machine. The port is deliberately not a `service` on the
+  fly_machine, so Fly's proxy never exposes it; the only process that can
+  reach it is the sidecar sharing the machine's network namespace, which
+  re-exposes a filtered set on :9464 for Fly's metrics scrape.
+-->
+<clickhouse>
+  <prometheus>
+    <endpoint>/metrics</endpoint>
+    <port>9363</port>
+    <metrics>true</metrics>
+    <events>true</events>
+    <asynchronous_metrics>true</asynchronous_metrics>
+  </prometheus>
+</clickhouse>

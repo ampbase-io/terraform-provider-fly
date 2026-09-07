@@ -46,6 +46,40 @@ resource "fly_app" "clickhouse" {
   network = "${var.name}-net"
 }
 
+# --- Images ---
+#
+# Both images are built through Fly's remote builder inside this apply,
+# into each app's own registry namespace, at a label that is a content
+# hash of the files under images/; a change to any of them rolls the
+# machines. See ../modules/fly-image. The collector sidecar runs the stock
+# upstream image, since nothing about it is specific to this cluster.
+
+module "keeper_image" {
+  source = "../modules/fly-image"
+
+  app     = fly_app.keeper.name
+  context = "${path.module}/images/keeper"
+  trigger_files = [
+    "${path.module}/images/keeper/Dockerfile",
+    "${path.module}/images/keeper/fly.toml",
+    "${path.module}/images/keeper/docker-entrypoint-fly.sh",
+  ]
+}
+
+module "clickhouse_image" {
+  source = "../modules/fly-image"
+
+  app     = fly_app.clickhouse.name
+  context = "${path.module}/images/server"
+  trigger_files = [
+    "${path.module}/images/server/Dockerfile",
+    "${path.module}/images/server/fly.toml",
+    "${path.module}/images/server/storage.xml",
+    "${path.module}/images/server/prometheus.xml",
+    "${path.module}/images/server/logging.xml",
+  ]
+}
+
 # --- Keeper quorum ---
 #
 # Volumes are host-pinned. Distinct per-machine names plus
@@ -80,7 +114,7 @@ resource "fly_machine" "keeper" {
   app    = fly_app.keeper.name
   region = var.region
   name   = "keeper-${count.index + 1}"
-  image  = var.keeper_image
+  image  = module.keeper_image.ref
 
   metadata = {
     fly_process_group = "keeper-${count.index + 1}"
@@ -165,7 +199,7 @@ resource "fly_machine" "clickhouse" {
   app    = fly_app.clickhouse.name
   region = var.region
   name   = "replica-${count.index + 1}"
-  image  = var.clickhouse_image
+  image  = module.clickhouse_image.ref
 
   metadata = {
     fly_process_group = "replica-${count.index + 1}"
@@ -230,10 +264,11 @@ resource "fly_machine" "clickhouse" {
   # its Fly identity.
   container {
     name  = "app"
-    image = var.clickhouse_image
+    image = module.clickhouse_image.ref
 
     # Each replica keeps its cold parts under its own prefix in the bucket;
-    # storage.xml reads the endpoint and the credentials from env.
+    # the storage.xml baked into the image reads the endpoint and the
+    # credentials from env.
     env = {
       COLD_ENDPOINT = "${var.s3_endpoint}/${var.s3_bucket}/replica-${format("%02d", count.index + 1)}/"
     }
@@ -243,11 +278,6 @@ resource "fly_machine" "clickhouse" {
     }
     secret {
       env_var = "AWS_SECRET_ACCESS_KEY"
-    }
-
-    file {
-      guest_path = "/etc/clickhouse-server/config.d/storage.xml"
-      raw_value  = base64encode(file("${path.module}/templates/storage.xml"))
     }
 
     file {

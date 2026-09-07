@@ -5,6 +5,14 @@ with an OpenTelemetry Collector sidecar on every replica. Derived from a
 production cluster; the shape is what the provider's less obvious blocks are
 for:
 
+- **The images are built in the apply**, through Fly's remote builder, by
+  [`../modules/fly-image`](../modules/fly-image/) from `images/keeper` and
+  `images/server`: the Keeper image adds the entrypoint shim Fly's
+  root-owned volume mounts require, the server image bakes in the config
+  that is the same on every machine (the cold-tier policy, the Prometheus
+  endpoint, console logging). Both pin the full patch version, because the
+  image label is a hash of the Dockerfile and a floating tag would move
+  under an unchanged label.
 - **`file`** renders per-machine config (a Keeper's `server_id`, the peer
   list) into the guest, so one image serves every node.
 - **`fly_volume` + `mount` with `readopt_on_host_migration`** survive Fly
@@ -15,8 +23,8 @@ for:
   server and give Fly's Prometheus per-replica attribution for free.
 - **`fly_secret` with `value_wo_version`** feeds `min_secrets_version`, so a
   rotated key restarts the replicas into the new value.
-- **A cold tier in object storage.** `templates/storage.xml` adds an S3 disk
-  and a `hot_then_cold` policy; each replica writes under its own prefix in
+- **A cold tier in object storage.** `images/server/storage.xml` adds an
+  S3 disk and a `hot_then_cold` policy; each replica writes under its own prefix in
   the bucket, and a table opts in with `SETTINGS storage_policy =
   'hot_then_cold'`.
 
