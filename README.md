@@ -68,7 +68,7 @@ validated in CI against the provider built from the same commit:
 | Example | Shows |
 |---|---|
 | [`examples/cluster`](examples/cluster/) | A ClickHouse cluster with a Keeper quorum: per-machine `file` config, host-pinned volumes that survive host migration, machine-level checks on a service-less quorum, an OTel sidecar with per-replica metrics attribution |
-| [`examples/adopt`](examples/adopt/) | Bringing flyctl-created machines under Terraform with `import`, and why their names stay |
+| [`examples/vault`](examples/vault/) | A Vault HA cluster adopted from flyctl-created machines: the image built through Fly's remote builder in the same apply ([`examples/modules/fly-image`](examples/modules/fly-image/)), a one-shot plugin-registrar container gated on an `exec` readiness check, the restart semantics that make it one-shot, and a collector sidecar |
 | [`examples/public-surface`](examples/public-surface/) | Public addresses, an ACME certificate, the DNS record it validates through, and a gate that holds the apply until it is live |
 | [`examples/secrets`](examples/secrets/) | The three cases of `value_wo_version`, and `min_secrets_version` turning a rotation into a restart |
 

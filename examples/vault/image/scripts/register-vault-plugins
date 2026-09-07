@@ -1,0 +1,15 @@
+#!/bin/sh
+# One-shot: log in as this machine, register each plugin binary under
+# /vault/plugins by its sha256, and pin the cluster to it. Exits 0 when
+# every plugin is registered; a non-zero exit is retried by the
+# container's restart policy.
+set -eu
+: "${REGISTRAR_VAULT_ADDR:?}" "${REGISTRAR_VAULT_ROLE:?}" "${REGISTRAR_VAULT_AUTH_PATH:?}"
+export VAULT_ADDR=http://127.0.0.1:8200
+jwt=$(fetch-oidc-token "$REGISTRAR_VAULT_ADDR")
+VAULT_TOKEN=$(vault write -field=token "auth/$REGISTRAR_VAULT_AUTH_PATH/login" role="$REGISTRAR_VAULT_ROLE" jwt="$jwt")
+export VAULT_TOKEN
+for plugin in /vault/plugins/*; do
+  name=$(basename "$plugin")
+  vault plugin register -sha256="$(sha256sum "$plugin" | cut -d' ' -f1)" database "$name"
+done

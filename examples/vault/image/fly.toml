@@ -1,0 +1,5 @@
+# Anchors the flyctl build; the app name is overridden by the module.
+app = "placeholder"
+
+[build]
+  dockerfile = "Dockerfile"
