@@ -62,7 +62,18 @@ resource "fly_machine" "web" {
 }
 ```
 
-More in [`examples/`](examples/).
+Worked examples, each a root module derived from a production setup and
+validated in CI against the provider built from the same commit:
+
+| Example | Shows |
+|---|---|
+| [`examples/cluster`](examples/cluster/) | A ClickHouse cluster with a Keeper quorum: per-machine `file` config, host-pinned volumes that survive host migration, machine-level checks on a service-less quorum, an OTel sidecar with per-replica metrics attribution |
+| [`examples/adopt`](examples/adopt/) | Bringing flyctl-created machines under Terraform with `import`, and why their names stay |
+| [`examples/public-surface`](examples/public-surface/) | Public addresses, an ACME certificate, the DNS record it validates through, and a gate that holds the apply until it is live |
+| [`examples/secrets`](examples/secrets/) | The three cases of `value_wo_version`, and `min_secrets_version` turning a rotation into a restart |
+
+The per-resource snippets in [`examples/resources/`](examples/resources/) are
+what the registry docs render.
 
 ### Secrets
 

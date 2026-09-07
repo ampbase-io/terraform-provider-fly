@@ -39,3 +39,40 @@ jobs:
       - run: go generate ./...
       - run: git diff --exit-code docs/
         name: Generated docs are committed
+  # Every directory under examples/ that is a root module is validated against
+  # the provider built from this commit, through a dev override, so an example
+  # that drifts from the schema fails here rather than in a reader's terminal.
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.11.6
+          tofu_wrapper: false
+      - name: Build the provider for a dev override
+        run: |
+          mkdir -p "$RUNNER_TEMP/provider"
+          go build -o "$RUNNER_TEMP/provider/terraform-provider-fly" .
+          cat > "$RUNNER_TEMP/tofurc" <<EOF
+          provider_installation {
+            dev_overrides {
+              "registry.terraform.io/ampbase-io/fly" = "$RUNNER_TEMP/provider"
+            }
+            direct {}
+          }
+          EOF
+      - name: Validate every example root
+        env:
+          TF_CLI_CONFIG_FILE: ${{ runner.temp }}/tofurc
+        run: |
+          tofu fmt -check -recursive examples/
+          for dir in examples/*/; do
+            [ -f "$dir/main.tf" ] || continue
+            echo "== $dir"
+            tofu -chdir="$dir" init -backend=false -input=false >/dev/null
+            tofu -chdir="$dir" validate
+          done
