@@ -15,8 +15,27 @@ for:
   server and give Fly's Prometheus per-replica attribution for free.
 - **`fly_secret` with `value_wo_version`** feeds `min_secrets_version`, so a
   rotated key restarts the replicas into the new value.
+- **A cold tier in object storage.** `templates/storage.xml` adds an S3 disk
+  and a `hot_then_cold` policy; each replica writes under its own prefix in
+  the bucket, and a table opts in with `SETTINGS storage_policy =
+  'hot_then_cold'`.
+
+## The bucket
+
+The bucket is deliberately not in this configuration: its lifecycle is not
+the cluster's, and a `destroy` of the machines must not take the data with
+them. Create it once, on Fly's Tigris, and hand the keys to the variables:
+
+```sh
+fly storage create --org my-org --name example-clickhouse-cold
+# prints AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for the bucket
+```
+
+Then:
 
 ```sh
 tofu init
-tofu apply -var org_slug=my-org -var s3_access_key_id=... -var s3_secret_access_key=...
+tofu apply -var org_slug=my-org \
+  -var s3_bucket=example-clickhouse-cold \
+  -var s3_access_key_id=tid_... -var s3_secret_access_key=tsec_...
 ```

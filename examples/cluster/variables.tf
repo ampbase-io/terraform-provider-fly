@@ -51,6 +51,17 @@ variable "clickhouse_volume_gb" {
   default = 50
 }
 
+variable "s3_endpoint" {
+  description = "S3 endpoint, no trailing slash and no bucket."
+  type        = string
+  default     = "https://fly.storage.tigris.dev"
+}
+
+variable "s3_bucket" {
+  description = "Cold-tier bucket, provisioned out of band; see the README."
+  type        = string
+}
+
 variable "s3_access_key_id" {
   description = "Access key ID for the cold-storage bucket. Its own rotation marker."
   type        = string

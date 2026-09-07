@@ -222,19 +222,32 @@ resource "fly_machine" "clickhouse" {
     }
   }
 
-  # With container blocks present, the top-level image is the first
-  # container; declaring it as "app" here is what lets the sidecar name it
-  # in depends_on. Every container shares the machine's network namespace
-  # and its Fly identity.
+  # Once container blocks exist, Fly ignores the machine's top-level
+  # image, env and file fields; the top-level image above stays only
+  # because the schema requires one. The server is declared as a container
+  # like any other, and naming it "app" is what lets the sidecar name it in
+  # depends_on. Every container shares the machine's network namespace and
+  # its Fly identity.
   container {
     name  = "app"
     image = var.clickhouse_image
+
+    # Each replica keeps its cold parts under its own prefix in the bucket;
+    # storage.xml reads the endpoint and the credentials from env.
+    env = {
+      COLD_ENDPOINT = "${var.s3_endpoint}/${var.s3_bucket}/replica-${format("%02d", count.index + 1)}/"
+    }
 
     secret {
       env_var = "AWS_ACCESS_KEY_ID"
     }
     secret {
       env_var = "AWS_SECRET_ACCESS_KEY"
+    }
+
+    file {
+      guest_path = "/etc/clickhouse-server/config.d/storage.xml"
+      raw_value  = base64encode(file("${path.module}/templates/storage.xml"))
     }
 
     file {
