@@ -31,6 +31,12 @@ fly storage create --org my-org --name example-clickhouse-cold
 # prints AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY for the bucket
 ```
 
+ClickHouse probes the cold disk when it starts, so a wrong key or endpoint
+fails the server's startup rather than the first write; the error names the
+disk. Once a table opts in, `system.parts.disk_name` says where each part
+lives, and `ALTER TABLE … MOVE PARTITION … TO VOLUME 'cold'` moves one by
+hand.
+
 Then:
 
 ```sh
