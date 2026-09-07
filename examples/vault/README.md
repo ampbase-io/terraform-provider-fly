@@ -6,8 +6,9 @@ Fly rather than assumed:
 
 - **The image is built in the apply**, through Fly's remote builder, by
   [`../modules/fly-image`](../modules/fly-image/): the label is a content
-  hash of the Dockerfile, the scripts and every plugin source (enumerated
-  with `fileset`, so a new file cannot be forgotten), and the machines take
+  hash of the Dockerfile, the scripts and every plugin binary under
+  `image/plugins/` (enumerated with `fileset`, so a new one cannot be
+  forgotten), and the machines take
   the module's `ref`, so they wait for the push and roll when it changes.
 - **Adoption.** `import` blocks take the app and the machines `fly deploy`
   created; names Fly assigned stay, since the API ignores a rename.

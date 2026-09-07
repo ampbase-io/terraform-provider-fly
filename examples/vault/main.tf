@@ -38,17 +38,16 @@ locals {
 # source produces a new label and an in-place update that rolls the
 # machines onto it; nothing changed is a no-op.
 #
-# The plugin sources are enumerated with fileset rather than listed: a
+# The plugins are enumerated with fileset rather than listed: a
 # hand-written list would silently stop rebuilding the image the day a
-# file is added, and the symptom would be machines running a plugin binary
-# nobody shipped. Tests are neither build inputs nor a reason to roll a
-# Vault cluster.
+# plugin is added, and the symptom would be machines running a plugin
+# binary nobody shipped.
 
 locals {
   image_context = "${path.module}/image"
-  plugin_sources = sort([
-    for f in fileset("${local.image_context}/plugins", "**/*.go") :
-    "${local.image_context}/plugins/${f}" if !endswith(f, "_test.go")
+  plugins = sort([
+    for f in fileset("${local.image_context}/plugins", "**") :
+    "${local.image_context}/plugins/${f}"
   ])
 }
 
@@ -63,8 +62,7 @@ module "vault_image" {
     "${local.image_context}/scripts/register-vault-plugins",
     "${local.image_context}/scripts/vault-ready",
     "${local.image_context}/scripts/fetch-oidc-token",
-    "${local.image_context}/plugins/go.mod",
-  ], local.plugin_sources)
+  ], local.plugins)
 }
 
 # --- Adoption ---
