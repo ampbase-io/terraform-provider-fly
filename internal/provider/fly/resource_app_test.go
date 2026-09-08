@@ -18,6 +18,10 @@ import (
 	"github.com/ampbase-io/terraform-provider-fly/flyio"
 )
 
+// appNumericID is what the fake's Apps_show returns for every app. Distinct
+// from any zero value a dropped attribute would leave behind.
+const appNumericID = 214748364700
+
 // appsFake serves the two Apps endpoints fly_app.Create drives — POST /apps
 // and GET /apps/{name} — and reports back whatever org the create named, so
 // a test can tell an org that reached Fly from one that only reached state.
@@ -55,10 +59,11 @@ func (f *appsFake) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"id":           "app-" + app["name"],
-			"name":         app["name"],
-			"organization": map[string]string{"slug": app["org_slug"]},
-			"network":      app["network"],
+			"id":                  "app-" + app["name"],
+			"name":                app["name"],
+			"organization":        map[string]string{"slug": app["org_slug"]},
+			"network":             app["network"],
+			"internal_numeric_id": appNumericID,
 		})
 	default:
 		http.NotFound(w, r)
@@ -206,5 +211,86 @@ func TestApp_EmptyOrgIsRejected(t *testing.T) {
 	}
 	if !resp.Diagnostics.HasError() {
 		t.Error(`org = "" passed validation; it would silently create the app in the provider's org`)
+	}
+}
+
+// TestApp_NumericIDReachesStateOnCreateAndImport: Apps_show returns
+// internal_numeric_id and it is the identifier an Apps macaroon caveat names,
+// so a consumer attenuating a token to one app reads it off this resource
+// rather than calling Fly itself. Create has to record it, and so does Read,
+// which is the only path that fills it in after an import — ImportState
+// passes through `name` alone, so an import whose Read forgets the number
+// leaves a resource whose app cannot be named until it is replaced.
+//
+// The second half starts from the import shape (name set, everything else
+// null) rather than from Create's state on purpose: a refresh of an already
+// populated state carries the value through whether or not Read assigns it,
+// so that version of the assertion holds with Read's line deleted.
+func TestApp_NumericIDReachesStateOnCreateAndImport(t *testing.T) {
+	t.Parallel()
+	f := newAppsFake(t)
+	r := f.resource(t)
+	s := appSchema(t)
+
+	resp := &resource.CreateResponse{State: tfsdk.State{Schema: s}}
+	r.Create(context.Background(), resource.CreateRequest{
+		Plan: appPlan(t, s, appResourceModel{
+			Name:              types.StringValue("numeric-app"),
+			Org:               types.StringUnknown(),
+			Network:           types.StringUnknown(),
+			ID:                types.StringUnknown(),
+			InternalNumericID: types.Int64Unknown(),
+		}),
+	}, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("create errored: %v", resp.Diagnostics)
+	}
+	var created appResourceModel
+	if diags := resp.State.Get(context.Background(), &created); diags.HasError() {
+		t.Fatalf("read state: %v", diags)
+	}
+	if got := created.InternalNumericID; got.IsNull() || got.ValueInt64() != appNumericID {
+		t.Errorf("created internal_numeric_id = %v, want %d", got, appNumericID)
+	}
+
+	imported := tfsdk.State{Schema: s}
+	if diags := imported.Set(context.Background(), &appResourceModel{
+		Name:              types.StringValue("numeric-app"),
+		Org:               types.StringNull(),
+		Network:           types.StringNull(),
+		ID:                types.StringNull(),
+		InternalNumericID: types.Int64Null(),
+	}); diags.HasError() {
+		t.Fatalf("build imported state: %v", diags)
+	}
+	readResp := &resource.ReadResponse{State: tfsdk.State{Schema: s}}
+	r.Read(context.Background(), resource.ReadRequest{State: imported}, readResp)
+	if readResp.Diagnostics.HasError() {
+		t.Fatalf("read errored: %v", readResp.Diagnostics)
+	}
+	var refreshed appResourceModel
+	if diags := readResp.State.Get(context.Background(), &refreshed); diags.HasError() {
+		t.Fatalf("read refreshed state: %v", diags)
+	}
+	if got := refreshed.InternalNumericID; got.IsNull() || got.ValueInt64() != appNumericID {
+		t.Errorf("imported internal_numeric_id = %v, want %d", got, appNumericID)
+	}
+}
+
+// TestApp_NumericIDIsNotConfigurable: the number is Fly's, assigned at
+// create. An Optional attribute here would let a config name an app id that
+// is not the app's, which is the one mistake a token-attenuating consumer
+// cannot detect — the caveat would be well-formed and name someone else.
+func TestApp_NumericIDIsNotConfigurable(t *testing.T) {
+	t.Parallel()
+	attr, ok := appSchema(t).Attributes["internal_numeric_id"].(rschema.Int64Attribute)
+	if !ok {
+		t.Fatal("internal_numeric_id is not an Int64Attribute")
+	}
+	if attr.Optional || attr.Required {
+		t.Error("internal_numeric_id is settable from config; it is Fly's own identifier")
+	}
+	if !attr.Computed {
+		t.Error("internal_numeric_id is not Computed; nothing would populate it")
 	}
 }

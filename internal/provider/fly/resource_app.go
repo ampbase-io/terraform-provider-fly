@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -27,10 +28,11 @@ type appResource struct {
 }
 
 type appResourceModel struct {
-	Name    types.String `tfsdk:"name"`
-	Org     types.String `tfsdk:"org"`
-	Network types.String `tfsdk:"network"`
-	ID      types.String `tfsdk:"id"`
+	Name              types.String `tfsdk:"name"`
+	Org               types.String `tfsdk:"org"`
+	Network           types.String `tfsdk:"network"`
+	ID                types.String `tfsdk:"id"`
+	InternalNumericID types.Int64  `tfsdk:"internal_numeric_id"`
 }
 
 func NewAppResource() resource.Resource {
@@ -82,6 +84,18 @@ func (r *appResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *
 				Computed:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			// Computed and never configurable: it is Fly's own identifier,
+			// assigned at create. It is what an Apps macaroon caveat names —
+			// the caveat keys on this number, not on the app name — so a
+			// consumer that has to attenuate a token to one app reads it from
+			// here rather than calling the API itself.
+			"internal_numeric_id": schema.Int64Attribute{
+				Description: "Fly's internal numeric application ID. This is the identifier an `Apps` macaroon caveat names.",
+				Computed:    true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
 				},
 			},
 		},
@@ -143,6 +157,7 @@ func (r *appResource) Create(ctx context.Context, req resource.CreateRequest, re
 	plan.ID = types.StringValue(app.ID)
 	plan.Org = types.StringValue(app.OrgSlug)
 	plan.Network = types.StringValue(app.Network)
+	plan.InternalNumericID = types.Int64Value(app.InternalNumericID)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
@@ -170,6 +185,7 @@ func (r *appResource) Read(ctx context.Context, req resource.ReadRequest, resp *
 	state.ID = types.StringValue(app.ID)
 	state.Org = types.StringValue(app.OrgSlug)
 	state.Network = types.StringValue(app.Network)
+	state.InternalNumericID = types.Int64Value(app.InternalNumericID)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
