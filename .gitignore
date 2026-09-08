@@ -3,3 +3,7 @@ dist/
 *.tfstate.backup
 .terraform/
 .terraform.lock.hcl
+
+# The provider binary `go build .` leaves in the root — the same command
+# CI runs, so an uncommitted-changes or `git add -A` step picks it up.
+/terraform-provider-fly

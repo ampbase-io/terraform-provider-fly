@@ -873,6 +873,9 @@ func (c *Client) GetApp(ctx context.Context, appName string) (*AppInfo, error) {
 	if app.Network != nil {
 		info.Network = *app.Network
 	}
+	if app.InternalNumericId != nil {
+		info.InternalNumericID = int64(*app.InternalNumericId)
+	}
 	return info, nil
 }
 
@@ -883,6 +886,9 @@ type AppInfo struct {
 	Status  string
 	OrgSlug string
 	Network string // per-app private network ("" for the org's default)
+	// InternalNumericID is Fly's own numeric app id, the identifier an
+	// Apps macaroon caveat names. Zero when Apps_show omits it.
+	InternalNumericID int64
 }
 
 // StartMachine starts a stopped or suspended machine.

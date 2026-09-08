@@ -33,3 +33,4 @@ resource "fly_app" "web" {
 ### Read-Only
 
 - `id` (String) Application ID.
+- `internal_numeric_id` (Number) Fly's internal numeric application ID. This is the identifier an `Apps` macaroon caveat names.
