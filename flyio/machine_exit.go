@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/ampbase-io/terraform-provider-fly/flyio/machines"
@@ -18,6 +19,10 @@ import (
 // and truncation is silent: the exit event drops off the end of the window and
 // a machine that certainly exited reads as one that carries no exit state.
 const machineEventsLimit = 50
+
+// machineStateDestroyed is spelled as fly-go spells the machine state it
+// mirrors (machine_types.go:28, MachineStateDestroyed).
+const machineStateDestroyed = "destroyed"
 
 // MachineExit is a machine's exit state, as its own event log records it.
 // Readable after the machine has been destroyed, which is what lets a
@@ -37,9 +42,29 @@ type MachineExit struct {
 	ExitedAt  time.Time
 }
 
-// MachineExit reads a machine's exit state from its event log, returning
-// (nil, nil) when the log carries none — a machine still running, or one whose
-// events have not caught up.
+// MachineOutcome is how a machine ended, as its event log records it: exited
+// (Exit set), gone without ever having exited (Destroyed, no Exit), or not yet
+// known (neither). A machine can be destroyed having never run a process, and
+// its log then carries no exit event, ever.
+type MachineOutcome struct {
+	// Exit is the machine's exit state, or nil when its log carries none.
+	Exit *MachineExit
+	// Destroyed reports a terminal destroy event, which a machine that
+	// exited normally also has. Only the pair names the outcome.
+	Destroyed bool
+}
+
+// NeverExited reports the state a caller must stop polling on: no later read
+// can produce an exit event.
+//
+// Exit is checked first and wins, or every machine that exited and was then
+// destroyed — which is all of them — would read as one that never exited.
+func (o *MachineOutcome) NeverExited() bool {
+	return o.Exit == nil && o.Destroyed
+}
+
+// MachineOutcome reads how a machine ended from its event log. The returned
+// outcome is never nil when err is nil.
 //
 // The events endpoint rather than the machine record's embedded array: that
 // holds only the five most recent events and a one-shot run produces six, so
@@ -47,8 +72,10 @@ type MachineExit struct {
 //
 // A 404 is returned as an error and nothing is concluded from it: the API
 // reports a pruned record and an id that never existed identically, and the
-// caller's own record of the launch is what tells those apart.
-func (c *Client) MachineExit(ctx context.Context, appName, machineID string) (*MachineExit, error) {
+// caller's own record of the launch is what tells those apart. It is not how
+// a destroyed machine is detected — the API answers 200 for one, on this
+// endpoint and on the machine record both, while it retains them.
+func (c *Client) MachineOutcome(ctx context.Context, appName, machineID string) (*MachineOutcome, error) {
 	limit := machineEventsLimit
 	resp, err := c.gen.MachinesListEvents(ctx, appName, machineID, &machines.MachinesListEventsParams{Limit: &limit})
 	if err != nil {
@@ -62,7 +89,21 @@ func (c *Client) MachineExit(ctx context.Context, appName, machineID string) (*M
 	if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
 		return nil, fmt.Errorf("decode machine events: %w", err)
 	}
-	return newestExit(events), nil
+	return &MachineOutcome{Exit: newestExit(events), Destroyed: destroyed(events)}, nil
+}
+
+// destroyed reports whether the log leaves the machine terminally gone.
+//
+// Status rather than Type: fly-go pins the status values as constants
+// (machine_types.go:28-29) and carries none for the type values.
+//
+// "destroyed" alone, though fly-go's Machine.IsActive (machine_types.go:133)
+// treats "destroying" as gone too: a machine mid-destroy can still write an
+// exit event, one already destroyed cannot.
+func destroyed(events []machineEvent) bool {
+	return slices.ContainsFunc(events, func(e machineEvent) bool {
+		return e.status() == machineStateDestroyed
+	})
 }
 
 // newestExit picks the exit state from the newest event carrying one, ordered
@@ -85,28 +126,48 @@ func newestExit(events []machineEvent) *MachineExit {
 	return &MachineExit{ExitCode: x.ExitCode, OOMKilled: x.OOMKilled, ExitedAt: x.ExitedAt}
 }
 
-// machineEvent is one entry from the events endpoint. Hand-written because the
-// OpenAPI schema declares MachineEvent.Request as an untyped object, so the
-// generated client decodes the exit payload into an interface{} nothing can
-// read. The shape below is superfly/fly-go's `machine_types.go`
-// (MachineEvent / MachineRequest / MachineExitEvent), which is what flyd
-// writes.
+// machineEvent is the generated type with the only two fields it cannot carry
+// overridden. Embedded rather than retyped so the rest stays in step with the
+// spec — an earlier hand-written copy silently stopped carrying `status`.
 type machineEvent struct {
-	Timestamp int64 `json:"timestamp"`
-	Request   *struct {
+	machines.MachineEvent
+
+	// These shadow the embedded fields of the same JSON name (an outer field
+	// at depth 0 wins over an embedded one at depth 1). Do not drop them for
+	// the generated forms:
+	//
+	// Request is map[string]interface{} there — the OpenAPI schema declares
+	// it untyped — so the exit payload is unreadable. The shape below is
+	// fly-go's machine_types.go (MachineRequest / MachineExitEvent).
+	//
+	// Timestamp is *int there, and a millisecond epoch (~1.79e12) overflows
+	// a 32-bit int. This provider ships 386 and arm builds (.goreleaser.yml),
+	// where decoding into the generated field fails outright.
+	Request   *machineRequest `json:"request"`
+	Timestamp int64           `json:"timestamp"`
+}
+
+type machineRequest struct {
+	ExitEvent *machineExitEvent `json:"exit_event"`
+	// The capitalized tag is real, and fly-go's GetExitCode checks this
+	// nesting before the flat one (machine_types.go:313-321), so both occur.
+	MonitorEvent *struct {
 		ExitEvent *machineExitEvent `json:"exit_event"`
-		// The capitalized tag is real, and fly-go's GetExitCode checks this
-		// nesting before the flat one, so both occur.
-		MonitorEvent *struct {
-			ExitEvent *machineExitEvent `json:"exit_event"`
-		} `json:"MonitorEvent"`
-	} `json:"request"`
+	} `json:"MonitorEvent"`
 }
 
 type machineExitEvent struct {
 	ExitCode  int32     `json:"exit_code"`
 	OOMKilled bool      `json:"oom_killed"`
 	ExitedAt  time.Time `json:"exited_at"`
+}
+
+// status is the event's status, or "" where the response carried none.
+func (e machineEvent) status() string {
+	if e.Status == nil {
+		return ""
+	}
+	return *e.Status
 }
 
 func (e machineEvent) exit() *machineExitEvent {
