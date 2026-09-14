@@ -330,7 +330,6 @@ const (
 	FlyMachineRestartPolicyAlways    FlyMachineRestartPolicy = "always"
 	FlyMachineRestartPolicyNo        FlyMachineRestartPolicy = "no"
 	FlyMachineRestartPolicyOnFailure FlyMachineRestartPolicy = "on-failure"
-	FlyMachineRestartPolicySpotPrice FlyMachineRestartPolicy = "spot-price"
 )
 
 // Valid indicates whether the value is a known member of the FlyMachineRestartPolicy enum.
@@ -341,8 +340,6 @@ func (e FlyMachineRestartPolicy) Valid() bool {
 	case FlyMachineRestartPolicyNo:
 		return true
 	case FlyMachineRestartPolicyOnFailure:
-		return true
-	case FlyMachineRestartPolicySpotPrice:
 		return true
 	default:
 		return false
@@ -666,10 +663,24 @@ type CheckStatus struct {
 
 // CreateAppRequest defines model for CreateAppRequest.
 type CreateAppRequest struct {
-	EnableSubdomains *bool   `json:"enable_subdomains,omitempty"`
-	Name             *string `json:"name,omitempty"`
-	Network          *string `json:"network,omitempty"`
-	OrgSlug          *string `json:"org_slug,omitempty"`
+	EnableSubdomains *bool `json:"enable_subdomains,omitempty"`
+
+	// IdempotencyKey When set, makes a retry of this exact request safe: a
+	// second create with the same key and the same name (or no name) returns
+	// the app the first request created, instead of erroring on a false name
+	// conflict or creating a duplicate. A second create with the same key
+	// but a *different* name is rejected outright; it won't silently
+	// hand back the first app.
+	IdempotencyKey *string `json:"idempotency_key,omitempty"`
+	Name           *string `json:"name,omitempty"`
+	Network        *string `json:"network,omitempty"`
+	OrgSlug        *string `json:"org_slug,omitempty"`
+}
+
+// CreateAppResponse defines model for CreateAppResponse.
+type CreateAppResponse struct {
+	CreatedAt *int    `json:"created_at,omitempty"`
+	Id        *string `json:"id,omitempty"`
 }
 
 // CreateMachineRequest defines model for CreateMachineRequest.
@@ -989,8 +1000,7 @@ type FlyContainerConfig struct {
 	// Name Name is used to identify the container in the machine.
 	Name *string `json:"name,omitempty"`
 
-	// Restart Restart is used to define the restart policy for the container. NOTE: spot-price is not
-	// supported for containers.
+	// Restart Restart is used to define the restart policy for the container.
 	Restart *FlyMachineRestart `json:"restart,omitempty"`
 
 	// Secrets Secrets can be provided at the process level to explicitly indicate which secrets should be
@@ -1283,14 +1293,21 @@ type FlyMachineMetrics struct {
 
 // FlyMachineMount defines model for fly.MachineMount.
 type FlyMachineMount struct {
-	AddSizeGb              *int    `json:"add_size_gb,omitempty"`
-	Encrypted              *bool   `json:"encrypted,omitempty"`
-	ExtendThresholdPercent *int    `json:"extend_threshold_percent,omitempty"`
-	Name                   *string `json:"name,omitempty"`
-	Path                   *string `json:"path,omitempty"`
-	SizeGb                 *int    `json:"size_gb,omitempty"`
-	SizeGbLimit            *int    `json:"size_gb_limit,omitempty"`
-	Volume                 *string `json:"volume,omitempty"`
+	AddSizeGb *int `json:"add_size_gb,omitempty"`
+
+	// AddSizePercent AddSizePercent grows by a percentage of the current size, rounded up to GiB.
+	// It is mutually exclusive with AddSizeGb.
+	AddSizePercent         *int  `json:"add_size_percent,omitempty"`
+	Encrypted              *bool `json:"encrypted,omitempty"`
+	ExtendThresholdPercent *int  `json:"extend_threshold_percent,omitempty"`
+
+	// MinAddSizeGb MinAddSizeGb is the minimum proportional growth in GiB (default 1).
+	MinAddSizeGb *int    `json:"min_add_size_gb,omitempty"`
+	Name         *string `json:"name,omitempty"`
+	Path         *string `json:"path,omitempty"`
+	SizeGb       *int    `json:"size_gb,omitempty"`
+	SizeGbLimit  *int    `json:"size_gb_limit,omitempty"`
+	Volume       *string `json:"volume,omitempty"`
 }
 
 // FlyMachinePort defines model for fly.MachinePort.
@@ -1328,23 +1345,18 @@ type FlyMachineProcess struct {
 
 // FlyMachineRestart The Machine restart policy defines whether and how flyd restarts a Machine after its main process exits. See https://fly.io/docs/machines/guides-examples/machine-restart-policy/.
 type FlyMachineRestart struct {
-	// GpuBidPrice GPU bid price for spot Machines.
-	GpuBidPrice *float32 `json:"gpu_bid_price,omitempty"`
-
 	// MaxRetries When policy is on-failure, the maximum number of times to attempt to restart the Machine before letting it stop.
 	MaxRetries *int `json:"max_retries,omitempty"`
 
 	// Policy * no - Never try to restart a Machine automatically when its main process exits, whether that’s on purpose or on a crash.
 	// * always - Always restart a Machine automatically and never let it enter a stopped state, even when the main process exits cleanly.
 	// * on-failure - Try up to MaxRetries times to automatically restart the Machine if it exits with a non-zero exit code. Default when no explicit policy is set, and for Machines with schedules.
-	// * spot-price - Starts the Machine only when there is capacity and the spot price is less than or equal to the bid price.
 	Policy *FlyMachineRestartPolicy `json:"policy,omitempty"`
 }
 
 // FlyMachineRestartPolicy * no - Never try to restart a Machine automatically when its main process exits, whether that’s on purpose or on a crash.
 // * always - Always restart a Machine automatically and never let it enter a stopped state, even when the main process exits cleanly.
 // * on-failure - Try up to MaxRetries times to automatically restart the Machine if it exits with a non-zero exit code. Default when no explicit policy is set, and for Machines with schedules.
-// * spot-price - Starts the Machine only when there is capacity and the spot price is less than or equal to the bid price.
 type FlyMachineRestartPolicy string
 
 // FlyMachineRootfs defines model for fly.MachineRootfs.
@@ -4913,10 +4925,17 @@ func (r AppsListResponse) ContentType() string {
 type AppsCreateResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *CreateAppResponse
 	// JSON400 the response for an HTTP 400 `application/json` response
 	JSON400 *ErrorResponse
 	// JSON422 the response for an HTTP 422 `application/json` response
 	JSON422 *ErrorResponse
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r AppsCreateResponse) GetJSON201() *CreateAppResponse {
+	return r.JSON201
 }
 
 // GetJSON400 returns the response for an HTTP 400 `application/json` response
@@ -6778,8 +6797,12 @@ func ParseAppsCreateResponse(rsp *http.Response) (*AppsCreateResponse, error) {
 	}
 
 	switch {
-	case rsp.StatusCode == 201:
-		break // No content-type
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest CreateAppResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorResponse
