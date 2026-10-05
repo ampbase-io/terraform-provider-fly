@@ -816,8 +816,19 @@ type IssuedCertificateType string
 
 // ListAppsResponse defines model for ListAppsResponse.
 type ListAppsResponse struct {
-	Apps      []App `json:"apps,omitempty"`
-	TotalApps *int  `json:"total_apps,omitempty"`
+	Apps []App `json:"apps,omitempty"`
+
+	// NextCursor Pagination cursor for the next page. Absent when no more apps remain.
+	// Cursors expire 30 minutes after the first page was requested.
+	NextCursor *string `json:"next_cursor,omitempty"`
+
+	// TotalApps The number of apps matching the request, across all pages. When
+	// paginating, it is counted once when the first page is requested and not
+	// updated afterwards, so it may differ slightly from the number of apps
+	// returned: it excludes apps created later and includes apps deleted while
+	// paginating. Apps created in the seconds before the first page may also be
+	// counted but missing from the pages.
+	TotalApps *int `json:"total_apps,omitempty"`
 }
 
 // Machine defines model for Machine.
@@ -827,12 +838,15 @@ type Machine struct {
 	Cordoned         *bool              `json:"cordoned,omitempty"`
 	CreatedAt        *string            `json:"created_at,omitempty"`
 	Events           []MachineEvent     `json:"events,omitempty"`
+	HostFeatures     []string           `json:"host_features,omitempty"`
 	HostStatus       *MachineHostStatus `json:"host_status,omitempty"`
 	Id               *string            `json:"id,omitempty"`
 	ImageRef         *ImageRef          `json:"image_ref,omitempty"`
 	IncompleteConfig *FlyMachineConfig  `json:"incomplete_config,omitempty"`
 
-	// InstanceId InstanceID is unique for each version of the machine
+	// InstanceId InstanceID is the same value as `version`.
+	//
+	// Deprecated: use `version`.
 	InstanceId *string        `json:"instance_id,omitempty"`
 	Lease      *StrippedLease `json:"lease,omitempty"`
 	Name       *string        `json:"name,omitempty"`
@@ -845,6 +859,11 @@ type Machine struct {
 	Region    *string `json:"region,omitempty"`
 	State     *string `json:"state,omitempty"`
 	UpdatedAt *string `json:"updated_at,omitempty"`
+
+	// Version Version is unique for each version of the machine. Pass it as
+	// `current_version` when updating the Machine to reject the update if the
+	// Machine has changed since this version.
+	Version *string `json:"version,omitempty"`
 }
 
 // MachineHostStatus defines model for Machine.HostStatus.
@@ -869,14 +888,11 @@ type OwnershipVerification struct {
 
 // StopRequest defines model for StopRequest.
 type StopRequest struct {
-	// Signal Example: SIGTERM
-	Signal *StopRequestSignal `json:"signal,omitempty"`
-
-	// Timeout Example: 1s
-	Timeout *string `json:"timeout,omitempty"`
+	Signal  *StopRequestSignal `json:"signal,omitempty"`
+	Timeout *string            `json:"timeout,omitempty"`
 }
 
-// StopRequestSignal Example: SIGTERM
+// StopRequestSignal defines model for StopRequest.Signal.
 type StopRequestSignal string
 
 // StrippedLease defines model for StrippedLease.
@@ -889,10 +905,15 @@ type StrippedLease struct {
 // UpdateMachineRequest defines model for UpdateMachineRequest.
 type UpdateMachineRequest struct {
 	// Config An object defining the Machine configuration
-	Config            *FlyMachineConfig `json:"config,omitempty"`
-	CurrentVersion    *string           `json:"current_version,omitempty"`
-	LeaseTtl          *int              `json:"lease_ttl,omitempty"`
-	MinSecretsVersion *int              `json:"min_secrets_version,omitempty"`
+	Config *FlyMachineConfig `json:"config,omitempty"`
+
+	// CurrentVersion CurrentVersion is an optional optimistic-concurrency guard: the Machine's
+	// `version`, as returned by create, get or a previous update. When set
+	// and it is no longer the Machine's current version, the update is rejected
+	// with 409 Conflict and nothing changes. Omit it to update unconditionally.
+	CurrentVersion    *string `json:"current_version,omitempty"`
+	LeaseTtl          *int    `json:"lease_ttl,omitempty"`
+	MinSecretsVersion *int    `json:"min_secrets_version,omitempty"`
 
 	// Name Unique name for this Machine. If omitted, one is generated for you
 	Name *string `json:"name,omitempty"`
@@ -912,27 +933,29 @@ type UpdateVolumeRequest struct {
 
 // Volume defines model for Volume.
 type Volume struct {
-	AttachedAllocId   *string           `json:"attached_alloc_id,omitempty"`
-	AttachedMachineId *string           `json:"attached_machine_id,omitempty"`
-	AutoBackupEnabled *bool             `json:"auto_backup_enabled,omitempty"`
-	BlockSize         *int              `json:"block_size,omitempty"`
-	Blocks            *int              `json:"blocks,omitempty"`
-	BlocksAvail       *int              `json:"blocks_avail,omitempty"`
-	BlocksFree        *int              `json:"blocks_free,omitempty"`
-	BytesTotal        *int              `json:"bytes_total,omitempty"`
-	BytesUsed         *int              `json:"bytes_used,omitempty"`
-	CreatedAt         *string           `json:"created_at,omitempty"`
-	Encrypted         *bool             `json:"encrypted,omitempty"`
-	Fstype            *string           `json:"fstype,omitempty"`
-	HostStatus        *VolumeHostStatus `json:"host_status,omitempty"`
-	Id                *string           `json:"id,omitempty"`
-	Name              *string           `json:"name,omitempty"`
-	Region            *string           `json:"region,omitempty"`
-	SizeGb            *int              `json:"size_gb,omitempty"`
-	SnapshotRetention *int              `json:"snapshot_retention,omitempty"`
-	State             *string           `json:"state,omitempty"`
-	Type              *VolumeType       `json:"type,omitempty"`
-	Zone              *string           `json:"zone,omitempty"`
+	AttachedAllocId      *string           `json:"attached_alloc_id,omitempty"`
+	AttachedMachineId    *string           `json:"attached_machine_id,omitempty"`
+	AutoBackupEnabled    *bool             `json:"auto_backup_enabled,omitempty"`
+	BlockSize            *int              `json:"block_size,omitempty"`
+	Blocks               *int              `json:"blocks,omitempty"`
+	BlocksAvail          *int              `json:"blocks_avail,omitempty"`
+	BlocksFree           *int              `json:"blocks_free,omitempty"`
+	BytesTotal           *int              `json:"bytes_total,omitempty"`
+	BytesUsed            *int              `json:"bytes_used,omitempty"`
+	CreatedAt            *string           `json:"created_at,omitempty"`
+	Encrypted            *bool             `json:"encrypted,omitempty"`
+	Fstype               *string           `json:"fstype,omitempty"`
+	HostFeatures         []string          `json:"host_features,omitempty"`
+	HostStatus           *VolumeHostStatus `json:"host_status,omitempty"`
+	Id                   *string           `json:"id,omitempty"`
+	Name                 *string           `json:"name,omitempty"`
+	Region               *string           `json:"region,omitempty"`
+	RequiredHostFeatures []string          `json:"required_host_features,omitempty"`
+	SizeGb               *int              `json:"size_gb,omitempty"`
+	SnapshotRetention    *int              `json:"snapshot_retention,omitempty"`
+	State                *string           `json:"state,omitempty"`
+	Type                 *VolumeType       `json:"type,omitempty"`
+	Zone                 *string           `json:"zone,omitempty"`
 }
 
 // VolumeHostStatus defines model for Volume.HostStatus.
@@ -1157,14 +1180,10 @@ type FlyMachineCacheDrive struct {
 // FlyMachineCheck defines model for fly.MachineCheck.
 type FlyMachineCheck struct {
 	// GracePeriod The time to wait after a VM starts before checking its health
-	//
-	// Example: 1s
 	GracePeriod *string                `json:"grace_period,omitempty"`
 	Headers     []FlyMachineHTTPHeader `json:"headers,omitempty"`
 
 	// Interval The time between connectivity checks
-	//
-	// Example: 15s
 	Interval *string `json:"interval,omitempty"`
 
 	// Kind Kind of the check (informational, readiness)
@@ -1183,8 +1202,6 @@ type FlyMachineCheck struct {
 	Protocol *string `json:"protocol,omitempty"`
 
 	// Timeout The maximum time a connection can take before being reported as failing its health check
-	//
-	// Example: 2s
 	Timeout *string `json:"timeout,omitempty"`
 
 	// TlsServerName If the protocol is https, the hostname to use for TLS certificate validation
@@ -1259,7 +1276,8 @@ type FlyMachineGuest struct {
 	MemoryMb         *int     `json:"memory_mb,omitempty"`
 
 	// PersistRootfs Deprecated: use MachineConfig.Rootfs instead
-	PersistRootfs *FlyMachineGuestPersistRootfs `json:"persist_rootfs,omitempty"`
+	PersistRootfs        *FlyMachineGuestPersistRootfs `json:"persist_rootfs,omitempty"`
+	RequiredHostFeatures []string                      `json:"required_host_features,omitempty"`
 }
 
 // FlyMachineGuestPersistRootfs Deprecated: use MachineConfig.Rootfs instead
@@ -1409,14 +1427,10 @@ type FlyMachineServiceAutostop string
 // FlyMachineServiceCheck defines model for fly.MachineServiceCheck.
 type FlyMachineServiceCheck struct {
 	// GracePeriod The time to wait after a VM starts before checking its health
-	//
-	// Example: 1s
 	GracePeriod *string                `json:"grace_period,omitempty"`
 	Headers     []FlyMachineHTTPHeader `json:"headers,omitempty"`
 
 	// Interval The time between connectivity checks
-	//
-	// Example: 15s
 	Interval *string `json:"interval,omitempty"`
 
 	// Method For http checks, the HTTP method to use to when making the request
@@ -1432,8 +1446,6 @@ type FlyMachineServiceCheck struct {
 	Protocol *string `json:"protocol,omitempty"`
 
 	// Timeout The maximum time a connection can take before being reported as failing its health check
-	//
-	// Example: 2s
 	Timeout *string `json:"timeout,omitempty"`
 
 	// TlsServerName If the protocol is https, the hostname to use for TLS certificate validation
@@ -1490,10 +1502,8 @@ type FlyStatic struct {
 
 // FlyStopConfig defines model for fly.StopConfig.
 type FlyStopConfig struct {
-	Signal *FlyStopConfigSignal `json:"signal,omitempty"`
-
-	// Timeout Example: 10s
-	Timeout *string `json:"timeout,omitempty"`
+	Signal  *FlyStopConfigSignal `json:"signal,omitempty"`
+	Timeout *string              `json:"timeout,omitempty"`
 }
 
 // FlyStopConfigSignal defines model for FlyStopConfig.Signal.
@@ -1549,6 +1559,12 @@ type AppsListParams struct {
 
 	// AppRole Filter apps by role
 	AppRole *string `form:"app_role,omitempty" json:"app_role,omitempty"`
+
+	// Limit The number of apps to fetch (must be between 1 and 5000). Providing a limit enables pagination. Without it, all apps are returned in one response.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Value of next_cursor from the previous page. Requires limit. Later pages only include apps that existed when the first page was requested. Apps created in the seconds before the first page was requested may be missing. Cursors expire 30 minutes after the first page was requested.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // AppCertificatesListParams defines parameters for AppCertificatesList.
@@ -1582,6 +1598,12 @@ type MachinesListParams struct {
 
 	// MetadataKey Filter by a machine metadata key and exact value. Replace {key} with the metadata key, for example metadata.foo=bar. Specify multiple metadata filters to require all matches.
 	MetadataKey *string `form:"metadata.{key},omitempty" json:"metadata.{key},omitempty"`
+
+	// Cursor Value of the fly-next-cursor response header from the previous page. Requires limit.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Limit The number of machines to fetch (must be between 1 and 1000). Providing a limit enables pagination. This limit is advisory; responses may be shorter, or even empty, even when more machines remain.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // MachinesDeleteParams defines parameters for MachinesDelete.
@@ -1592,6 +1614,9 @@ type MachinesDeleteParams struct {
 
 // MachinesShowParams defines parameters for MachinesShow.
 type MachinesShowParams struct {
+	// Version 26-character Machine version ID; returns that version of the Machine instead of the current one
+	Version *string `form:"version,omitempty" json:"version,omitempty"`
+
 	// IncludeLeases Include machine lease
 	IncludeLeases *bool `form:"include_leases,omitempty" json:"include_leases,omitempty"`
 }
@@ -1645,6 +1670,12 @@ type SecretGetParams struct {
 type VolumesListParams struct {
 	// Summary Only return summary info about volumes (omit blocks, block size, etc)
 	Summary *bool `form:"summary,omitempty" json:"summary,omitempty"`
+
+	// Cursor Value of the fly-next-cursor response header from the previous page. Requires limit.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Limit The number of volumes to fetch (must be between 1 and 1000). Providing a limit enables pagination. This limit is advisory; responses may be shorter, or even empty, even when more volumes remain.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // AppsCreateJSONRequestBody defines body for AppsCreate for application/json ContentType.
@@ -2816,6 +2847,30 @@ func NewAppsListRequest(server string, params *AppsListParams) (*http.Request, e
 
 		}
 
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -3422,6 +3477,30 @@ func NewMachinesListRequest(server string, appName string, params *MachinesListP
 
 		}
 
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -3592,6 +3671,18 @@ func NewMachinesShowRequest(server string, appName string, machineId string, par
 		// styled parameters, preserving literal commas as delimiters
 		// per the OpenAPI spec (e.g. "color=blue,black,brown").
 		var rawQueryFragments []string
+
+		if params.Version != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "version", *params.Version, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
 
 		if params.IncludeLeases != nil {
 
@@ -4231,6 +4322,30 @@ func NewVolumesListRequest(server string, appName string, params *VolumesListPar
 		if params.Summary != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "summary", *params.Summary, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -4886,11 +5001,18 @@ type AppsListResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *ListAppsResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *ErrorResponse
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r AppsListResponse) GetJSON200() *ListAppsResponse {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r AppsListResponse) GetJSON400() *ErrorResponse {
+	return r.JSON400
 }
 
 // GetBody returns the raw response body bytes
@@ -5373,16 +5495,30 @@ func (r AppIPAssignmentsDeleteResponse) ContentType() string {
 	return ""
 }
 
+// MachinesListResponse200Headers the declared response headers of an HTTP 200 response for MachinesList
+type MachinesListResponse200Headers struct {
+	FlyNextCursor *string
+}
+
 type MachinesListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *[]Machine
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *ErrorResponse
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *MachinesListResponse200Headers
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r MachinesListResponse) GetJSON200() *[]Machine {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r MachinesListResponse) GetJSON400() *ErrorResponse {
+	return r.JSON400
 }
 
 // GetBody returns the raw response body bytes
@@ -5537,6 +5673,8 @@ type MachinesUpdateResponse struct {
 	JSON200 *Machine
 	// JSON400 the response for an HTTP 400 `application/json` response
 	JSON400 *ErrorResponse
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *ErrorResponse
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
@@ -5547,6 +5685,11 @@ func (r MachinesUpdateResponse) GetJSON200() *Machine {
 // GetJSON400 returns the response for an HTTP 400 `application/json` response
 func (r MachinesUpdateResponse) GetJSON400() *ErrorResponse {
 	return r.JSON400
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r MachinesUpdateResponse) GetJSON409() *ErrorResponse {
+	return r.JSON409
 }
 
 // GetBody returns the raw response body bytes
@@ -5913,16 +6056,30 @@ func (r SecretGetResponse) ContentType() string {
 	return ""
 }
 
+// VolumesListResponse200Headers the declared response headers of an HTTP 200 response for VolumesList
+type VolumesListResponse200Headers struct {
+	FlyNextCursor *string
+}
+
 type VolumesListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *[]Volume
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *ErrorResponse
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *VolumesListResponse200Headers
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r VolumesListResponse) GetJSON200() *[]Volume {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r VolumesListResponse) GetJSON400() *ErrorResponse {
+	return r.JSON400
 }
 
 // GetBody returns the raw response body bytes
@@ -6778,6 +6935,13 @@ func ParseAppsListResponse(rsp *http.Response) (*AppsListResponse, error) {
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
 	}
 
 	return response, nil
@@ -7081,6 +7245,26 @@ func ParseMachinesListResponse(rsp *http.Response) (*MachinesListResponse, error
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers MachinesListResponse200Headers
+		if values := rsp.Header.Values("fly-next-cursor"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "fly-next-cursor", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.FlyNextCursor = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil
@@ -7181,6 +7365,13 @@ func ParseMachinesUpdateResponse(rsp *http.Response) (*MachinesUpdateResponse, e
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 
@@ -7423,6 +7614,26 @@ func ParseVolumesListResponse(rsp *http.Response) (*VolumesListResponse, error) 
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers VolumesListResponse200Headers
+		if values := rsp.Header.Values("fly-next-cursor"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "fly-next-cursor", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.FlyNextCursor = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil
