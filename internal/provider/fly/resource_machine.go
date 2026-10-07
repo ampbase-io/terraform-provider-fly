@@ -1144,12 +1144,20 @@ func (r *machineResource) Read(ctx context.Context, req resource.ReadRequest, re
 	client := r.pd.client
 
 	info, err := client.GetMachine(ctx, state.App.ValueString(), state.ID.ValueString())
-	if err != nil {
-		if flyio.IsNotFound(err) {
-			resp.State.RemoveResource(ctx)
-			return
-		}
+	switch {
+	case flyio.IsNotFound(err):
+		resp.State.RemoveResource(ctx)
+		return
+	case err != nil:
 		resp.Diagnostics.AddError("Read Machine Error", err.Error())
+		return
+	case info.Destroyed():
+		// Gone as surely as a 404, and Fly refuses every update on it, so
+		// keeping it would plan an in-place update that fails on each apply.
+		// Removing it makes the next plan create a replacement. Not
+		// "destroying": Create's by-name adoption would pick that machine
+		// back up, so it stays until it reaches "destroyed".
+		resp.State.RemoveResource(ctx)
 		return
 	}
 
@@ -1372,7 +1380,7 @@ func (r *machineResource) findMachineByName(ctx context.Context, client *flyio.C
 		return nil, err
 	}
 	for _, m := range ms {
-		if m.Name == name && m.State != "destroyed" {
+		if m.Name == name && !m.Destroyed() {
 			return &m, nil
 		}
 	}

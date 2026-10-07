@@ -316,8 +316,13 @@ func (f *machinesFake) handleMachine(w http.ResponseWriter, r *http.Request, id 
 		f.updateMachine(w, r, id)
 	case http.MethodDelete:
 		f.mu.Lock()
+		_, ok := f.machines[id]
 		delete(f.machines, id)
 		f.mu.Unlock()
+		if !ok {
+			writeErr(w, http.StatusNotFound, "machine not found")
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	default:
 		http.NotFound(w, r)

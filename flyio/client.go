@@ -487,6 +487,14 @@ type MachineInfo struct {
 	Mounts []MachineMount
 }
 
+// Destroyed reports whether Fly has terminally destroyed the machine. The
+// Machines API can answer GET for a destroyed machine with a 200 carrying
+// this state rather than a 404, so a caller treating only 404 as gone keeps
+// a machine that no longer exists.
+func (m *MachineInfo) Destroyed() bool {
+	return m.State == machineStateDestroyed
+}
+
 // MachineMount is a single volume mount on a machine as reported by the
 // Machines API.
 type MachineMount struct {
