@@ -1247,7 +1247,16 @@ func (r *machineResource) Update(ctx context.Context, req resource.UpdateRequest
 
 	updateReq := buildUpdateMachineInput(&plan)
 	info, err := client.UpdateMachine(ctx, appName, machineID, updateReq)
-	if err != nil {
+	switch {
+	case flyio.IsHostFull(err):
+		// Update cannot hand back an ID other than the planned one, so the
+		// move to a host with room has to be a replace the caller plans.
+		resp.Diagnostics.AddError(flyio.HostFullSummary,
+			fmt.Sprintf("machine %s: its host has no room for it, and the Machines API cannot move a machine to another host. "+
+				"Replace this resource (tofu apply -replace=<address>) to create it on a host with room; "+
+				"a machine with a volume will be placed on the same host again. %s", machineID, err))
+		return
+	case err != nil:
 		resp.Diagnostics.AddError("Update Machine Error", err.Error())
 		return
 	}

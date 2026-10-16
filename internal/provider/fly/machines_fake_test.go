@@ -87,6 +87,12 @@ type fakeMachine struct {
 	showFailAfterUpdate int
 	showFailArmed       int
 
+	// updateStatus / updateBody, when updateStatus is non-zero, make every
+	// MachinesUpdate on this machine fail with that status and error message
+	// and leave the machine untouched — a host refusing to take it back.
+	updateStatus int
+	updateBody   string
+
 	// showStatus, when non-zero, makes MachinesShow return that HTTP status.
 	// Used to force a fast terminal failure in the WaitForChecks phase so the
 	// Create cleanup path is exercised without waiting out machineStartTimeout.
@@ -367,6 +373,10 @@ func (f *machinesFake) updateMachine(w http.ResponseWriter, r *http.Request, id 
 	m, ok := f.machines[id]
 	if !ok {
 		writeErr(w, http.StatusNotFound, "machine not found")
+		return
+	}
+	if m.updateStatus != 0 {
+		writeErr(w, m.updateStatus, m.updateBody)
 		return
 	}
 	f.nextInst++

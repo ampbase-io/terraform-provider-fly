@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"slices"
@@ -585,13 +586,32 @@ func (c *Client) ListMachines(ctx context.Context, appName string) ([]MachineInf
 }
 
 // GetMachine returns details for a single machine.
+//
+// Retries via retryFlyAPI on a client timeout and on a transient status. A
+// read has no side effect, so a timeout — which says nothing about whether
+// the server answered — is as safe to repeat as a 5xx, and failing on one
+// fails the whole plan over a single slow response.
 func (c *Client) GetMachine(ctx context.Context, appName, machineID string) (*MachineInfo, error) {
-	m, err := c.getMachineRaw(ctx, appName, machineID)
+	m, err := retryFlyAPI(ctx, func() (*machines.Machine, bool, error) {
+		m, err := c.getMachineRaw(ctx, appName, machineID)
+		return m, isClientTimeout(err) || isTransientErr(err), err
+	})
 	if err != nil {
 		return nil, err
 	}
 	info := machineInfoFrom(*m)
 	return &info, nil
+}
+
+// isClientTimeout reports whether err is a request that ran out of time
+// before a response arrived — http.Client's Timeout firing ("Client.Timeout
+// exceeded while awaiting headers") is the case it exists for. That error
+// also matches context.DeadlineExceeded, so it cannot tell the client's
+// timeout from the caller's; it does not need to, because retryFlyAPI stops
+// once the caller's context is done (backoff v5.0.3 retry.go Retry).
+func isClientTimeout(err error) bool {
+	ne, ok := errors.AsType[net.Error](err)
+	return ok && ne.Timeout()
 }
 
 // WaitForChecks polls GetMachine until all service-level checks report
@@ -1653,6 +1673,42 @@ func IsMachineLimit(err error) bool {
 	re, ok := errors.AsType[*ResponseError](err)
 	return ok && re.StatusCode == http.StatusUnprocessableEntity &&
 		strings.Contains(strings.ToLower(re.Body), "machine limit")
+}
+
+// HostFullSummary is the diagnostic summary a machine update reports when
+// IsHostFull matches. It is a contract, not prose: a caller that recovers by
+// replacing the resource (ampbase's runtime apply re-runs with -replace on
+// the diagnostic's address) matches this string, so it changes only with
+// that caller.
+const HostFullSummary = "Machine Host Full"
+
+// hostFullBodies are the refusals Fly gives when the host a machine is
+// pinned to cannot take it back. They are flyctl's own list: v0.4.118
+// internal/command/deploy/machines_deploymachinesapp.go updateMachine
+// replaces the machine on exactly these two substrings.
+var hostFullBodies = []string{
+	"could not reserve resource for machine",
+	"deploys to this host are temporarily disabled",
+}
+
+// IsHostFull reports whether err is Fly refusing to update or start a
+// machine because the host it lives on has no room for it. The Machines API
+// has no call that moves a machine to another host, so retrying the same
+// machine fails the same way until the host frees up; the remedy is a new
+// machine, which Fly places afresh. That holds only for a machine with no
+// volume — a volume pins its replacement to the same host — which is why
+// this reports the condition and leaves the replace to the caller.
+//
+// A substring match, like IsMachineLimit, and on the body alone: the
+// refusal carries no status code in its body (main.statusCode has none for
+// it) and flyctl matches the text without regard to the HTTP status.
+func IsHostFull(err error) bool {
+	re, ok := errors.AsType[*ResponseError](err)
+	if !ok {
+		return false
+	}
+	body := strings.ToLower(re.Body)
+	return slices.ContainsFunc(hostFullBodies, func(s string) bool { return strings.Contains(body, s) })
 }
 
 // IsUnauthorized reports whether the Fly API rejected the client's token

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -2034,5 +2035,107 @@ func TestCreateMachineDoesNotRetryUnauthorized(t *testing.T) {
 		t.Errorf("err = %v, want an unauthorized error", err)
 	case calls != 1:
 		t.Errorf("server received %d calls, want 1", calls)
+	}
+}
+
+// TestIsHostFull separates the refusal whose remedy is a new machine from the
+// other 409s an update can get, which a replace would not fix.
+func TestIsHostFull(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"memory on the current host", &ResponseError{StatusCode: http.StatusConflict, Body: `{"error":"aborted: could not reserve resource for machine: insufficient memory available to fulfill request on the current host"}`}, true},
+		{"host closed to deploys", &ResponseError{StatusCode: http.StatusConflict, Body: `{"error":"Deploys to this host are temporarily disabled"}`}, true},
+		{"wrapped", fmt.Errorf("update: %w", &ResponseError{StatusCode: http.StatusConflict, Body: "could not reserve resource for machine"}), true},
+		{"another conflict", &ResponseError{StatusCode: http.StatusConflict, Body: `{"error":"lease currently held"}`}, false},
+		{"region capacity", &ResponseError{StatusCode: http.StatusServiceUnavailable, Body: "insufficient capacity"}, false},
+		{"the text outside a response", errors.New("could not reserve resource for machine"), false},
+		{"nil", nil, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := IsHostFull(tc.err); got != tc.want {
+				t.Errorf("IsHostFull(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestGetMachineRetriesClientTimeout covers the read that failed a whole plan
+// with "Client.Timeout exceeded while awaiting headers": the first show hangs
+// past the client's timeout and the second answers. Without the retry the
+// first attempt's error is the result.
+func TestGetMachineRetriesClientTimeout(t *testing.T) {
+	shortenFlyAPIBackoff(t)
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if calls.Add(1) == 1 {
+			<-r.Context().Done()
+			return
+		}
+		_ = json.NewEncoder(w).Encode(machines.Machine{Id: new("m1"), State: new("suspended")})
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, WithBaseURL(srv.URL), WithHTTPClient(&http.Client{Timeout: 50 * time.Millisecond}))
+	m, err := c.GetMachine(t.Context(), "app", "m1")
+	switch {
+	case err != nil:
+		t.Fatalf("GetMachine: %v", err)
+	case m.ID != "m1":
+		t.Errorf("id = %q, want m1", m.ID)
+	case calls.Load() != 2:
+		t.Errorf("calls = %d, want 2: one timeout, one answer", calls.Load())
+	}
+}
+
+// TestGetMachineDoesNotRetryNotFound keeps the retry to failures a repeat can
+// clear: a 404 is how Read learns a machine is gone, and it must arrive on
+// the first answer.
+func TestGetMachineDoesNotRetryNotFound(t *testing.T) {
+	shortenFlyAPIBackoff(t)
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, WithBaseURL(srv.URL))
+	_, err := c.GetMachine(t.Context(), "app", "gone")
+	switch {
+	case !IsNotFound(err):
+		t.Errorf("err = %v, want a 404", err)
+	case calls.Load() != 1:
+		t.Errorf("calls = %d, want 1", calls.Load())
+	}
+}
+
+// TestGetMachineStopsAtCallerDeadline keeps the caller's own deadline final.
+// isClientTimeout cannot tell it from the client's timeout — both errors
+// match context.DeadlineExceeded — so this holds only because the retry loop
+// checks the context between attempts, and this test is what notices if that
+// stops being true.
+func TestGetMachineStopsAtCallerDeadline(t *testing.T) {
+	shortenFlyAPIBackoff(t)
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	c := newTestClient(t, WithBaseURL(srv.URL))
+	if _, err := c.GetMachine(ctx, "app", "m1"); err == nil {
+		t.Fatal("GetMachine succeeded against a server that never answers")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Errorf("calls = %d, want 1: the caller's deadline ends the read", got)
 	}
 }
