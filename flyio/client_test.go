@@ -2039,7 +2039,8 @@ func TestCreateMachineDoesNotRetryUnauthorized(t *testing.T) {
 }
 
 // TestIsHostFull separates the refusal whose remedy is a new machine from the
-// other 409s an update can get, which a replace would not fix.
+// other 409s an update can get, which a replace would not fix, and from the
+// same text under a status that does not mean an update conflict.
 func TestIsHostFull(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -2051,6 +2052,7 @@ func TestIsHostFull(t *testing.T) {
 		{"host closed to deploys", &ResponseError{StatusCode: http.StatusConflict, Body: `{"error":"Deploys to this host are temporarily disabled"}`}, true},
 		{"wrapped", fmt.Errorf("update: %w", &ResponseError{StatusCode: http.StatusConflict, Body: "could not reserve resource for machine"}), true},
 		{"another conflict", &ResponseError{StatusCode: http.StatusConflict, Body: `{"error":"lease currently held"}`}, false},
+		{"the text under another status", &ResponseError{StatusCode: http.StatusBadRequest, Body: "could not reserve resource for machine"}, false},
 		{"region capacity", &ResponseError{StatusCode: http.StatusServiceUnavailable, Body: "insufficient capacity"}, false},
 		{"the text outside a response", errors.New("could not reserve resource for machine"), false},
 		{"nil", nil, false},

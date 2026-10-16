@@ -1683,28 +1683,32 @@ func IsMachineLimit(err error) bool {
 const HostFullSummary = "Machine Host Full"
 
 // hostFullBodies are the refusals Fly gives when the host a machine is
-// pinned to cannot take it back. They are flyctl's own list: v0.4.118
+// pinned to cannot take it back. The text is flyctl's (v0.4.118
 // internal/command/deploy/machines_deploymachinesapp.go updateMachine
-// replaces the machine on exactly these two substrings.
+// replaces the machine on exactly these two substrings); the status is not,
+// see IsHostFull.
 var hostFullBodies = []string{
 	"could not reserve resource for machine",
 	"deploys to this host are temporarily disabled",
 }
 
-// IsHostFull reports whether err is Fly refusing to update or start a
-// machine because the host it lives on has no room for it. The Machines API
-// has no call that moves a machine to another host, so retrying the same
-// machine fails the same way until the host frees up; the remedy is a new
-// machine, which Fly places afresh. That holds only for a machine with no
-// volume — a volume pins its replacement to the same host — which is why
-// this reports the condition and leaves the replace to the caller.
+// IsHostFull reports whether err is Fly refusing to update a machine because
+// the host it lives on has no room for it. The Machines API has no call that
+// moves a machine to another host, so retrying the same machine fails the
+// same way until the host frees up; the remedy is a new machine, which Fly
+// places afresh. That holds only for a machine with no volume — a volume pins
+// its replacement to the same host — which is why this reports the condition
+// and leaves the replace to the caller.
 //
-// A substring match, like IsMachineLimit, and on the body alone: the
-// refusal carries no status code in its body (main.statusCode has none for
-// it) and flyctl matches the text without regard to the HTTP status.
+// Keyed on 409, the status the spec declares for an update's conflict and
+// the one staging's refusal carried, and then on the body, since 409 also
+// covers conflicts a new machine would not fix. flyctl matches the text
+// under any status; this does not, because a caller that replaces on a match
+// destroys a machine, so a false positive costs more than the generic error
+// a false negative leaves.
 func IsHostFull(err error) bool {
 	re, ok := errors.AsType[*ResponseError](err)
-	if !ok {
+	if !ok || re.StatusCode != http.StatusConflict {
 		return false
 	}
 	body := strings.ToLower(re.Body)
