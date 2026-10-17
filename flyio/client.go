@@ -1676,10 +1676,8 @@ func IsMachineLimit(err error) bool {
 }
 
 // HostFullSummary is the diagnostic summary a machine update reports when
-// IsHostFull matches. It is a contract, not prose: a caller that recovers by
-// replacing the resource (ampbase's runtime apply re-runs with -replace on
-// the diagnostic's address) matches this string, so it changes only with
-// that caller.
+// IsHostFull matches, whether or not the machine is marked for replacement.
+// Callers may match it to tell this refusal from other update failures.
 const HostFullSummary = "Machine Host Full"
 
 // hostFullBodies are the refusals Fly gives when the host a machine is
@@ -1697,8 +1695,8 @@ var hostFullBodies = []string{
 // moves a machine to another host, so retrying the same machine fails the
 // same way until the host frees up; the remedy is a new machine, which Fly
 // places afresh. That holds only for a machine with no volume — a volume pins
-// its replacement to the same host — which is why this reports the condition
-// and leaves the replace to the caller.
+// its replacement to the same host — so the fly_machine resource marks only
+// a volume-less machine for replacement on the next plan.
 //
 // Keyed on 409, the status the spec declares for an update's conflict and
 // the one staging's refusal carried, and then on the body, since 409 also

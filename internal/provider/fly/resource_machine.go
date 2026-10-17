@@ -1280,9 +1280,11 @@ func (r *machineResource) Update(ctx context.Context, req resource.UpdateRequest
 	updateReq := buildUpdateMachineInput(&plan)
 	info, err := client.UpdateMachine(ctx, appName, machineID, updateReq)
 	switch {
-	case flyio.IsHostFull(err) && len(state.Mount) > 0:
+	case flyio.IsHostFull(err) && (len(state.Mount) > 0 || len(preUpdate.Mounts) > 0):
 		// A volume pins its machine's replacement to the same host, so
-		// replacing it would be refused the same way.
+		// replacing it would be refused the same way. The live mounts cover
+		// an imported machine, whose state carries none until config adds
+		// them.
 		resp.Diagnostics.AddError(flyio.HostFullSummary,
 			fmt.Sprintf("machine %s: its host has no room for it, and the Machines API cannot move a machine to another host. "+
 				"It has a volume, which places a replacement on the same host, so it is not replaced. %s", machineID, err))
