@@ -48,7 +48,7 @@ jobs:
         run: |
           set -euo pipefail
           TOFU_BINARY="$(command -v tofu)" go test ./internal/provider/fly/ -run 'TestMachineHostFull_' -count=1 -v | tee "$RUNNER_TEMP/out"
-          for t in TestMachineHostFull_NextPlanReplacesOnlyThatMachine TestMachineHostFull_LegacyMachineIsReplacedAtItsMovedAddress TestMachineHostFull_RefusedReplacementKeepsTheMarkOnTheOldMachine; do
+          for t in TestMachineHostFull_NextPlanReplacesOnlyThatMachine TestMachineHostFull_LegacyMachineIsReplacedAtItsMovedAddress TestMachineHostFull_RefusedReplacementKeepsTheMarkOnTheOldMachine TestMachineHostFull_NamedMachineIsReplacedUnderItsName TestMachineHostFull_UntaggedMachineIsNotMarked; do
             grep -q -- "--- PASS: $t" "$RUNNER_TEMP/out" || { echo "::error::$t did not pass" >&2; exit 1; }
           done
   docs:

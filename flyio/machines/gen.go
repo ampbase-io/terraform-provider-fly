@@ -1542,6 +1542,12 @@ type ListIPAssignmentsResponse struct {
 // MainStatusCode defines model for main.statusCode.
 type MainStatusCode string
 
+// UpsertMetadataKeyRequest defines model for upsertMetadataKeyRequest.
+type UpsertMetadataKeyRequest struct {
+	UpdatedAt *string `json:"updated_at,omitempty"`
+	Value     *string `json:"value,omitempty"`
+}
+
 // AppsListParams defines parameters for AppsList.
 type AppsListParams struct {
 	// OrgSlug The org slug, or 'personal', to filter apps
@@ -1661,6 +1667,9 @@ type MachinesCreateJSONRequestBody = CreateMachineRequest
 
 // MachinesUpdateJSONRequestBody defines body for MachinesUpdate for application/json ContentType.
 type MachinesUpdateJSONRequestBody = UpdateMachineRequest
+
+// MachinesUpsertMetadataJSONRequestBody defines body for MachinesUpsertMetadata for application/json ContentType.
+type MachinesUpsertMetadataJSONRequestBody = UpsertMetadataKeyRequest
 
 // MachinesStopJSONRequestBody defines body for MachinesStop for application/json ContentType.
 type MachinesStopJSONRequestBody = StopRequest
@@ -1915,6 +1924,24 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /v1/apps/{app_name}/machines/{machine_id}/events (the `MachinesListEvents` operationId).
 	MachinesListEvents(ctx context.Context, appName string, machineId string, params *MachinesListEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// MachinesUpsertMetadataWithBody Upsert Metadata Key
+	//
+	// Update metadata for a specific machine within an app by providing a metadata key.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /v1/apps/{app_name}/machines/{machine_id}/metadata/{key} (the `MachinesUpsertMetadata` operationId).
+	MachinesUpsertMetadataWithBody(ctx context.Context, appName string, machineId string, key string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// MachinesUpsertMetadata Upsert Metadata Key
+	//
+	// Update metadata for a specific machine within an app by providing a metadata key.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /v1/apps/{app_name}/machines/{machine_id}/metadata/{key} (the `MachinesUpsertMetadata` operationId).
+	MachinesUpsertMetadata(ctx context.Context, appName string, machineId string, key string, body MachinesUpsertMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// MachinesStart Start Machine
 	//
@@ -2440,6 +2467,44 @@ func (c *Client) MachinesUpdate(ctx context.Context, appName string, machineId s
 // Corresponds with GET /v1/apps/{app_name}/machines/{machine_id}/events (the `MachinesListEvents` operationId).
 func (c *Client) MachinesListEvents(ctx context.Context, appName string, machineId string, params *MachinesListEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewMachinesListEventsRequest(c.Server, appName, machineId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// MachinesUpsertMetadataWithBody Upsert Metadata Key
+//
+// Update metadata for a specific machine within an app by providing a metadata key.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /v1/apps/{app_name}/machines/{machine_id}/metadata/{key} (the `MachinesUpsertMetadata` operationId).
+func (c *Client) MachinesUpsertMetadataWithBody(ctx context.Context, appName string, machineId string, key string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewMachinesUpsertMetadataRequestWithBody(c.Server, appName, machineId, key, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// MachinesUpsertMetadata Upsert Metadata Key
+//
+// Update metadata for a specific machine within an app by providing a metadata key.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /v1/apps/{app_name}/machines/{machine_id}/metadata/{key} (the `MachinesUpsertMetadata` operationId).
+func (c *Client) MachinesUpsertMetadata(ctx context.Context, appName string, machineId string, key string, body MachinesUpsertMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewMachinesUpsertMetadataRequest(c.Server, appName, machineId, key, body)
 	if err != nil {
 		return nil, err
 	}
@@ -3741,6 +3806,67 @@ func NewMachinesListEventsRequest(server string, appName string, machineId strin
 	return req, nil
 }
 
+// NewMachinesUpsertMetadataRequest calls the generic MachinesUpsertMetadata builder with application/json body
+func NewMachinesUpsertMetadataRequest(server string, appName string, machineId string, key string, body MachinesUpsertMetadataJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewMachinesUpsertMetadataRequestWithBody(server, appName, machineId, key, "application/json", bodyReader)
+}
+
+// NewMachinesUpsertMetadataRequestWithBody constructs an http.Request for the MachinesUpsertMetadata method, with any body, and a specified content type
+func NewMachinesUpsertMetadataRequestWithBody(server string, appName string, machineId string, key string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "app_name", appName, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "machine_id", machineId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam2 string
+
+	pathParam2, err = runtime.StyleParamWithOptions("simple", false, "key", key, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/apps/%s/machines/%s/metadata/%s", pathParam0, pathParam1, pathParam2)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewMachinesStartRequest constructs an http.Request for the MachinesStart method
 func NewMachinesStartRequest(server string, appName string, machineId string) (*http.Request, error) {
 	var err error
@@ -4726,6 +4852,24 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /v1/apps/{app_name}/machines/{machine_id}/events (the `MachinesListEvents` operationId).
 	MachinesListEventsWithResponse(ctx context.Context, appName string, machineId string, params *MachinesListEventsParams, reqEditors ...RequestEditorFn) (*MachinesListEventsResponse, error)
 
+	// MachinesUpsertMetadataWithBodyWithResponse Upsert Metadata Key
+	//
+	// Update metadata for a specific machine within an app by providing a metadata key.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/apps/{app_name}/machines/{machine_id}/metadata/{key} (the `MachinesUpsertMetadata` operationId).
+	MachinesUpsertMetadataWithBodyWithResponse(ctx context.Context, appName string, machineId string, key string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*MachinesUpsertMetadataResponse, error)
+
+	// MachinesUpsertMetadataWithResponse Upsert Metadata Key
+	//
+	// Update metadata for a specific machine within an app by providing a metadata key.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /v1/apps/{app_name}/machines/{machine_id}/metadata/{key} (the `MachinesUpsertMetadata` operationId).
+	MachinesUpsertMetadataWithResponse(ctx context.Context, appName string, machineId string, key string, body MachinesUpsertMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*MachinesUpsertMetadataResponse, error)
+
 	// MachinesStartWithResponse Start Machine
 	//
 	// Start a specific Machine within an app.
@@ -5619,6 +5763,47 @@ func (r MachinesListEventsResponse) ContentType() string {
 	return ""
 }
 
+type MachinesUpsertMetadataResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *ErrorResponse
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r MachinesUpsertMetadataResponse) GetJSON400() *ErrorResponse {
+	return r.JSON400
+}
+
+// GetBody returns the raw response body bytes
+func (r MachinesUpsertMetadataResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r MachinesUpsertMetadataResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r MachinesUpsertMetadataResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r MachinesUpsertMetadataResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type MachinesStartResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -6495,6 +6680,36 @@ func (c *ClientWithResponses) MachinesListEventsWithResponse(ctx context.Context
 	return ParseMachinesListEventsResponse(rsp)
 }
 
+// MachinesUpsertMetadataWithBodyWithResponse Upsert Metadata Key
+//
+// Update metadata for a specific machine within an app by providing a metadata key.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/apps/{app_name}/machines/{machine_id}/metadata/{key} (the `MachinesUpsertMetadata` operationId).
+func (c *ClientWithResponses) MachinesUpsertMetadataWithBodyWithResponse(ctx context.Context, appName string, machineId string, key string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*MachinesUpsertMetadataResponse, error) {
+	rsp, err := c.MachinesUpsertMetadataWithBody(ctx, appName, machineId, key, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseMachinesUpsertMetadataResponse(rsp)
+}
+
+// MachinesUpsertMetadataWithResponse Upsert Metadata Key
+//
+// Update metadata for a specific machine within an app by providing a metadata key.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /v1/apps/{app_name}/machines/{machine_id}/metadata/{key} (the `MachinesUpsertMetadata` operationId).
+func (c *ClientWithResponses) MachinesUpsertMetadataWithResponse(ctx context.Context, appName string, machineId string, key string, body MachinesUpsertMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*MachinesUpsertMetadataResponse, error) {
+	rsp, err := c.MachinesUpsertMetadata(ctx, appName, machineId, key, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseMachinesUpsertMetadataResponse(rsp)
+}
+
 // MachinesStartWithResponse Start Machine
 //
 // Start a specific Machine within an app.
@@ -7207,6 +7422,35 @@ func ParseMachinesListEventsResponse(rsp *http.Response) (*MachinesListEventsRes
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseMachinesUpsertMetadataResponse parses an HTTP response from a MachinesUpsertMetadataWithResponse call
+func ParseMachinesUpsertMetadataResponse(rsp *http.Response) (*MachinesUpsertMetadataResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &MachinesUpsertMetadataResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
 
 	}
 

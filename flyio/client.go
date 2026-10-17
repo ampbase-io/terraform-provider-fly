@@ -480,6 +480,9 @@ type MachineInfo struct {
 	// for the amp app. Empty when the machine has no process-group
 	// metadata.
 	ProcessGroup string
+	// Metadata is the machine's config.metadata, including keys set with
+	// SetMachineMetadata, which update it without an UpdateMachine.
+	Metadata map[string]string
 	// Mounts is the machine's volume mounts as the API currently reports
 	// them. Fly can change the mounted volume out from under Terraform —
 	// a host migration forks the volume to a new ID and re-mounts it —
@@ -536,6 +539,7 @@ func machineInfoFrom(m machines.Machine) MachineInfo {
 	}
 	if m.Config != nil {
 		info.ProcessGroup = m.Config.Metadata["fly_process_group"]
+		info.Metadata = m.Config.Metadata
 		for _, mt := range m.Config.Mounts {
 			mm := MachineMount{}
 			if mt.Volume != nil {
@@ -930,6 +934,31 @@ func (c *Client) StartMachine(ctx context.Context, appName, machineID string) er
 		return nil
 	}
 	return responseError(resp)
+}
+
+// SetMachineMetadata sets one metadata key on a machine. It is the Machines
+// API's own metadata write, not an UpdateMachine, so the machine keeps its
+// config and is not restarted; flyctl tags the machines a blue-green deploy
+// leaves behind the same way (v0.4.118 internal/command/deploy/
+// strategy_bluegreen.go TagBlueMachinesAsSafeForDeletion). Retries on a
+// transient status via retryFlyAPI: writing the same value twice is a no-op.
+func (c *Client) SetMachineMetadata(ctx context.Context, appName, machineID, key, value string) error {
+	_, err := retryFlyAPI(ctx, func() (struct{}, bool, error) {
+		resp, err := c.gen.MachinesUpsertMetadata(ctx, appName, machineID, key, machines.UpsertMetadataKeyRequest{Value: &value})
+		if err != nil {
+			return struct{}{}, false, err
+		}
+		defer func() { _ = resp.Body.Close() }()
+		switch {
+		case resp.StatusCode == http.StatusNoContent, resp.StatusCode == http.StatusOK:
+			return struct{}{}, false, nil
+		case isTransient(resp):
+			return struct{}{}, true, responseError(resp)
+		default:
+			return struct{}{}, false, responseError(resp)
+		}
+	})
+	return err
 }
 
 // StopMachine stops a running machine with the default signal and timeout.

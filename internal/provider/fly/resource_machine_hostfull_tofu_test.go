@@ -127,6 +127,70 @@ func TestMachineHostFull_RefusedReplacementKeepsTheMarkOnTheOldMachine(t *testin
 	}
 }
 
+// TestMachineHostFull_NamedMachineIsReplacedUnderItsName holds the replace
+// for a machine with a name, which Fly keeps unique per app. Under
+// create_before_destroy the replacement finds the name held by the machine
+// it replaces, and has to take it rather than adopt it: adopting hands tofu
+// the old machine's ID as the new object, and the deposed delete then
+// destroys the only machine left. Destroy-then-create frees the name first.
+//
+// Its negative control is making replacingForHostFull always false: the
+// create_before_destroy row ends with org[1] gone from Fly.
+func TestMachineHostFull_NamedMachineIsReplacedUnderItsName(t *testing.T) {
+	t.Parallel()
+	for _, cbd := range []bool{true, false} {
+		t.Run(fmt.Sprintf("create_before_destroy=%v", cbd), func(t *testing.T) {
+			t.Parallel()
+			h := newTofuHarness(t)
+
+			h.writeNamedMachines(t, "img:v1", cbd)
+			h.mustApply(t)
+			before := h.fly.live()
+			h.fly.refuseUpdate(before["1"].id)
+
+			h.writeNamedMachines(t, "img:v2", cbd)
+			if out, err := h.tofu(t, "apply", "-input=false", "-auto-approve", "-no-color"); err == nil || !strings.Contains(out, "Error: Machine Host Full") {
+				t.Fatalf("apply against a full host: err %v, want it to fail on Machine Host Full:\n%s", err, out)
+			}
+			h.mustApply(t)
+
+			after := h.fly.live()
+			if got := after["1"]; got.id == "" || got.id == before["1"].id || got.name != "vm-1" || got.image != "img:v2" {
+				t.Errorf("org[1] = %+v, want a new machine named vm-1 on img:v2 in place of %s; live: %+v", got, before["1"].id, after)
+			}
+			if got, want := h.fly.destroyed(), []string{before["1"].id}; !slices.Equal(got, want) {
+				t.Errorf("destroyed %v, want %v", got, want)
+			}
+			if got := h.planActions(t); len(got) != 0 {
+				t.Errorf("plan after the replace = %v, want none", got)
+			}
+		})
+	}
+}
+
+// TestMachineHostFull_UntaggedMachineIsNotMarked: when the metadata write
+// fails, a named replacement could not tell the machine it replaces from its
+// own, so Update marks nothing and the next plan is the in-place update
+// again. Its negative control is marking despite the failed write, which
+// makes that plan a replace.
+func TestMachineHostFull_UntaggedMachineIsNotMarked(t *testing.T) {
+	t.Parallel()
+	h := newTofuHarness(t)
+
+	h.writeNamedMachines(t, "img:v1", true)
+	h.mustApply(t)
+	h.fly.refuseUpdate(h.fly.live()["1"].id)
+	h.fly.refuseTags()
+
+	h.writeNamedMachines(t, "img:v2", true)
+	if out, err := h.tofu(t, "apply", "-input=false", "-auto-approve", "-no-color"); err == nil || !strings.Contains(out, "Tagging it for replacement failed") {
+		t.Fatalf("apply with the tag refused: err %v, want it to say the tag failed:\n%s", err, out)
+	}
+	if got, want := h.planActions(t), map[string]string{"fly_machine.org[1]": "update"}; !mapsEqual(got, want) {
+		t.Errorf("plan after an untagged refusal = %v, want %v", got, want)
+	}
+}
+
 // tofuHarness is one work dir driven by the real tofu, with this provider
 // built from source behind a dev override and a fake Machines API.
 type tofuHarness struct {
@@ -247,6 +311,25 @@ resource "fly_machine" "org" {
 `, image))
 }
 
+// writeNamedMachines is three machines named vm-0..vm-2, the shape of a
+// cluster module that names its machines.
+func (h *tofuHarness) writeNamedMachines(t *testing.T, image string, createBeforeDestroy bool) {
+	t.Helper()
+	h.writeModule(t, fmt.Sprintf(`
+resource "fly_machine" "org" {
+  count = 3
+  app   = "ampbase-org-test"
+  name  = "vm-${count.index}"
+  image = %q
+  env   = { SLOT = "${count.index}" }
+
+  lifecycle {
+    create_before_destroy = %v
+  }
+}
+`, image, createBeforeDestroy))
+}
+
 // writeLegacyMachine is the singular machine the moved block exists for.
 func (h *tofuHarness) writeLegacyMachine(t *testing.T, image string) {
 	t.Helper()
@@ -295,8 +378,10 @@ func mapsEqual(a, b map[string]string) bool {
 }
 
 // tofuFly is the part of the Machines API fly_machine drives over a plan and
-// an apply: list, create, show, update, wait, start, stop, delete. A machine
-// whose ID is refused answers every update the way a full host does.
+// an apply: list, create, show, update, metadata, wait, start, stop, delete.
+// A machine whose ID is refused answers every update the way a full host
+// does. Names are unique, as Fly keeps them: a create under a name a live
+// machine holds is a 422.
 type tofuFly struct {
 	*httptest.Server
 
@@ -304,12 +389,14 @@ type tofuFly struct {
 	machines       map[string]*tofuFlyMachine
 	refused        map[string]bool
 	createsRefused bool
+	tagsRefused    bool
 	gone           []string
 	next           int
 }
 
 type tofuFlyMachine struct {
-	id, slot, image, instance string
+	id, name, slot, image, instance string
+	metadata                        map[string]string
 }
 
 func newTofuFly(t *testing.T) *tofuFly {
@@ -333,6 +420,13 @@ func (f *tofuFly) refuseCreates(refuse bool) {
 	f.createsRefused = refuse
 }
 
+// refuseTags makes every metadata write fail.
+func (f *tofuFly) refuseTags() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.tagsRefused = true
+}
+
 func (f *tofuFly) live() map[string]tofuFlyMachine {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -350,9 +444,11 @@ func (f *tofuFly) destroyed() []string {
 }
 
 type tofuFlyConfig struct {
+	Name   string `json:"name"`
 	Config struct {
-		Image string            `json:"image"`
-		Env   map[string]string `json:"env"`
+		Image    string            `json:"image"`
+		Env      map[string]string `json:"env"`
+		Metadata map[string]string `json:"metadata"`
 	} `json:"config"`
 }
 
@@ -378,8 +474,15 @@ func (f *tofuFly) handle(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusConflict, hostFullBody)
 			return
 		}
+		if f.nameTaken(body.Name) {
+			writeErr(w, http.StatusUnprocessableEntity, "a machine named "+body.Name+" already exists")
+			return
+		}
 		f.next++
-		m := &tofuFlyMachine{id: fmt.Sprintf("m-%d", f.next), slot: body.Config.Env["SLOT"], image: body.Config.Image, instance: fmt.Sprintf("i-%d", f.next)}
+		m := &tofuFlyMachine{
+			id: fmt.Sprintf("m-%d", f.next), name: body.Name, slot: body.Config.Env["SLOT"],
+			image: body.Config.Image, instance: fmt.Sprintf("i-%d", f.next), metadata: body.Config.Metadata,
+		}
 		f.machines[m.id] = m
 		writeJSON(w, http.StatusOK, m.wire())
 	case len(parts) < 2:
@@ -387,6 +490,18 @@ func (f *tofuFly) handle(w http.ResponseWriter, r *http.Request) {
 	default:
 		f.machine(w, r, parts[1], parts[2:])
 	}
+}
+
+func (f *tofuFly) nameTaken(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, m := range f.machines {
+		if m.name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func (f *tofuFly) machine(w http.ResponseWriter, r *http.Request, id string, action []string) {
@@ -402,6 +517,21 @@ func (f *tofuFly) machine(w http.ResponseWriter, r *http.Request, id string, act
 		delete(f.machines, id)
 		f.gone = append(f.gone, id)
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	case len(action) == 2 && action[0] == "metadata" && r.Method == http.MethodPost && f.tagsRefused:
+		writeErr(w, http.StatusBadRequest, "metadata refused")
+	case len(action) == 2 && action[0] == "metadata" && r.Method == http.MethodPost:
+		var body struct {
+			Value string `json:"value"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if m.metadata == nil {
+			m.metadata = map[string]string{}
+		}
+		m.metadata[action[1]] = body.Value
+		w.WriteHeader(http.StatusNoContent)
 	case len(action) == 0 && r.Method == http.MethodPost && f.refused[id]:
 		writeErr(w, http.StatusConflict, hostFullBody)
 	case len(action) == 0 && r.Method == http.MethodPost:
@@ -412,6 +542,7 @@ func (f *tofuFly) machine(w http.ResponseWriter, r *http.Request, id string, act
 		}
 		f.next++
 		m.image = body.Config.Image
+		m.metadata = body.Config.Metadata
 		m.instance = fmt.Sprintf("i-%d", f.next)
 		writeJSON(w, http.StatusOK, m.wire())
 	default:
@@ -423,11 +554,12 @@ func (f *tofuFly) machine(w http.ResponseWriter, r *http.Request, id string, act
 func (m *tofuFlyMachine) wire() map[string]any {
 	return map[string]any{
 		"id":          m.id,
+		"name":        m.name,
 		"state":       "started",
 		"instance_id": m.instance,
 		"region":      "iad",
 		"private_ip":  "fdaa::1",
-		"config":      map[string]any{"image": m.image, "env": map[string]string{"SLOT": m.slot}},
+		"config":      map[string]any{"image": m.image, "env": map[string]string{"SLOT": m.slot}, "metadata": m.metadata},
 		"image_ref": map[string]any{
 			"repository": strings.Split(m.image, ":")[0],
 			"digest":     fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(m.image))),
