@@ -2141,3 +2141,28 @@ func TestGetMachineStopsAtCallerDeadline(t *testing.T) {
 		t.Errorf("calls = %d, want 1: the caller's deadline ends the read", got)
 	}
 }
+
+// TestQuotesHostFull is IsHostFull without the status: the text under any
+// status, and only on a Machines API response.
+func TestQuotesHostFull(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"under 409", &ResponseError{StatusCode: http.StatusConflict, Body: "could not reserve resource for machine"}, true},
+		{"under 400", &ResponseError{StatusCode: http.StatusBadRequest, Body: "Deploys to this host are temporarily disabled"}, true},
+		{"another refusal", &ResponseError{StatusCode: http.StatusBadRequest, Body: "invalid config"}, false},
+		{"the text outside a response", errors.New("could not reserve resource for machine"), false},
+		{"nil", nil, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := QuotesHostFull(tc.err); got != tc.want {
+				t.Errorf("QuotesHostFull(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}

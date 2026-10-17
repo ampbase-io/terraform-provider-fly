@@ -23,6 +23,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/ampbase-io/terraform-provider-fly/flyio"
 	"github.com/ampbase-io/terraform-provider-fly/flyio/machines"
@@ -1296,6 +1297,13 @@ func (r *machineResource) Update(ctx context.Context, req resource.UpdateRequest
 				"The next plan replaces it, creating it on a host with room. %s", machineID, err))
 		return
 	case err != nil:
+		if flyio.QuotesHostFull(err) {
+			// The refusal's text without the 409 that classifies it: nothing
+			// is marked for it, and this is how a change in Fly's status
+			// would first be seen.
+			tflog.Warn(ctx, "host-full refusal under a status the provider does not classify; machine not marked for replacement",
+				map[string]any{"machine_id": machineID, "error": err.Error()})
+		}
 		resp.Diagnostics.AddError("Update Machine Error", err.Error())
 		return
 	}

@@ -1708,7 +1708,17 @@ var hostFullBodies = []string{
 // a false negative leaves.
 func IsHostFull(err error) bool {
 	re, ok := errors.AsType[*ResponseError](err)
-	if !ok || re.StatusCode != http.StatusConflict {
+	return ok && re.StatusCode == http.StatusConflict && QuotesHostFull(err)
+}
+
+// QuotesHostFull reports whether err is a Machines API response whose body
+// carries a host-full refusal, under any status. It is the half of IsHostFull
+// that does not depend on the status, so a caller can notice the refusal
+// arriving under a status IsHostFull does not accept, which is how Fly
+// changing it would first show.
+func QuotesHostFull(err error) bool {
+	re, ok := errors.AsType[*ResponseError](err)
+	if !ok {
 		return false
 	}
 	body := strings.ToLower(re.Body)

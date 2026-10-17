@@ -90,6 +90,43 @@ func TestMachineHostFull_LegacyMachineIsReplacedAtItsMovedAddress(t *testing.T) 
 	}
 }
 
+// TestMachineHostFull_RefusedReplacementKeepsTheMarkOnTheOldMachine starts
+// from a replace whose create is refused too. create_before_destroy keeps
+// the old machine, and the mark has to stay with it, so the plan after the
+// failed replace still replaces it rather than falling back to an in-place
+// update the full host would refuse again.
+func TestMachineHostFull_RefusedReplacementKeepsTheMarkOnTheOldMachine(t *testing.T) {
+	t.Parallel()
+	h := newTofuHarness(t)
+
+	h.writeMachines(t, "img:v1")
+	h.mustApply(t)
+	before := h.fly.live()
+	h.fly.refuseUpdate(before["1"].id)
+
+	h.writeMachines(t, "img:v2")
+	if out, err := h.tofu(t, "apply", "-input=false", "-auto-approve", "-no-color"); err == nil {
+		t.Fatalf("apply against a full host succeeded:\n%s", out)
+	}
+
+	h.fly.refuseCreates(true)
+	if out, err := h.tofu(t, "apply", "-input=false", "-auto-approve", "-no-color"); err == nil {
+		t.Fatalf("replace with its create refused succeeded:\n%s", out)
+	}
+	if got := h.fly.live()["1"].id; got != before["1"].id {
+		t.Fatalf("org[1] is %s after a refused replace, want the old %s kept", got, before["1"].id)
+	}
+
+	h.fly.refuseCreates(false)
+	if got, want := h.planActions(t), map[string]string{"fly_machine.org[1]": "create,delete"}; !mapsEqual(got, want) {
+		t.Errorf("plan after the refused replace = %v, want %v: the kept machine lost its mark", got, want)
+	}
+	h.mustApply(t)
+	if got := h.fly.live()["1"]; got.id == before["1"].id || got.image != "img:v2" {
+		t.Errorf("org[1] = %+v, want a new machine on img:v2", got)
+	}
+}
+
 // tofuHarness is one work dir driven by the real tofu, with this provider
 // built from source behind a dev override and a fake Machines API.
 type tofuHarness struct {
@@ -263,11 +300,12 @@ func mapsEqual(a, b map[string]string) bool {
 type tofuFly struct {
 	*httptest.Server
 
-	mu       sync.Mutex
-	machines map[string]*tofuFlyMachine
-	refused  map[string]bool
-	gone     []string
-	next     int
+	mu             sync.Mutex
+	machines       map[string]*tofuFlyMachine
+	refused        map[string]bool
+	createsRefused bool
+	gone           []string
+	next           int
 }
 
 type tofuFlyMachine struct {
@@ -286,6 +324,13 @@ func (f *tofuFly) refuseUpdate(id string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.refused[id] = true
+}
+
+// refuseCreates makes every create answer the way a full host does, or stops.
+func (f *tofuFly) refuseCreates(refuse bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.createsRefused = refuse
 }
 
 func (f *tofuFly) live() map[string]tofuFlyMachine {
@@ -327,6 +372,10 @@ func (f *tofuFly) handle(w http.ResponseWriter, r *http.Request) {
 		var body tofuFlyConfig
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if f.createsRefused {
+			writeErr(w, http.StatusConflict, hostFullBody)
 			return
 		}
 		f.next++
