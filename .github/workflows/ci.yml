@@ -42,15 +42,14 @@ jobs:
         with:
           tofu_version: 1.12.6
           tofu_wrapper: false
-      # A green run that skipped them would prove nothing: require each one
-      # to have passed.
+      # A green run that skipped them would prove nothing: fail on any skip,
+      # so a test added under the prefix is held without listing it here.
       - name: host-full replace against real tofu
         run: |
           set -euo pipefail
           TOFU_BINARY="$(command -v tofu)" go test ./internal/provider/fly/ -run 'TestMachineHostFull_' -count=1 -v | tee "$RUNNER_TEMP/out"
-          for t in TestMachineHostFull_NextPlanReplacesOnlyThatMachine TestMachineHostFull_LegacyMachineIsReplacedAtItsMovedAddress TestMachineHostFull_RefusedReplacementKeepsTheMarkOnTheOldMachine TestMachineHostFull_NamedMachineIsReplacedUnderItsName TestMachineHostFull_UntaggedMachineIsNotMarked; do
-            grep -q -- "--- PASS: $t" "$RUNNER_TEMP/out" || { echo "::error::$t did not pass" >&2; exit 1; }
-          done
+          if grep -q -- '--- SKIP' "$RUNNER_TEMP/out"; then echo "::error::a real-tofu test skipped" >&2; exit 1; fi
+          grep -q -- '--- PASS: TestMachineHostFull_' "$RUNNER_TEMP/out" || { echo "::error::no real-tofu test ran" >&2; exit 1; }
   docs:
     runs-on: ubuntu-latest
     steps:

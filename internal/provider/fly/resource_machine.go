@@ -1261,7 +1261,9 @@ func (r *machineResource) takeName(ctx context.Context, appName, holderID string
 	case err != nil:
 		return nil, err
 	case m == nil:
-		return nil, fmt.Errorf("name %q is still taken after destroying machine %s", *input.Name, holderID)
+		// CreateMachine reports every non-limit 422 on a named create as the
+		// name being taken, so the config can be what is refused here.
+		return nil, fmt.Errorf("create of %q refused with a 422 after destroying machine %s, which held the name: the name is still taken or the config is invalid", *input.Name, holderID)
 	}
 	return m, nil
 }
