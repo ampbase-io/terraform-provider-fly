@@ -1240,6 +1240,13 @@ func (r *machineResource) ModifyPlan(ctx context.Context, req resource.ModifyPla
 	resp.RequiresReplace = append(resp.RequiresReplace, path.Root("id"))
 }
 
+// hasVolume reports whether a machine has a volume mounted. It reads the
+// live machine as well as state because an imported machine's state carries
+// no mounts until config adds them.
+func hasVolume(state *machineResourceModel, live *flyio.MachineInfo) bool {
+	return len(state.Mount) > 0 || len(live.Mounts) > 0
+}
+
 func (r *machineResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan machineResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -1280,11 +1287,9 @@ func (r *machineResource) Update(ctx context.Context, req resource.UpdateRequest
 	updateReq := buildUpdateMachineInput(&plan)
 	info, err := client.UpdateMachine(ctx, appName, machineID, updateReq)
 	switch {
-	case flyio.IsHostFull(err) && (len(state.Mount) > 0 || len(preUpdate.Mounts) > 0):
+	case flyio.IsHostFull(err) && hasVolume(&state, preUpdate):
 		// A volume pins its machine's replacement to the same host, so
-		// replacing it would be refused the same way. The live mounts cover
-		// an imported machine, whose state carries none until config adds
-		// them.
+		// replacing it would be refused the same way.
 		resp.Diagnostics.AddError(flyio.HostFullSummary,
 			fmt.Sprintf("machine %s: its host has no room for it, and the Machines API cannot move a machine to another host. "+
 				"It has a volume, which places a replacement on the same host, so it is not replaced. %s", machineID, err))
