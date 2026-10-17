@@ -145,7 +145,7 @@ func TestMachineUpdate_WarnsOnHostFullTextItDoesNotClassify(t *testing.T) {
 			}
 			warns := 0
 			for _, e := range entries {
-				if e["@level"] == "warn" && strings.Contains(fmt.Sprint(e["@message"]), "host-full refusal under a status") {
+				if e["@level"] == "warn" && fmt.Sprint(e["@message"]) == unclassifiedHostFull {
 					warns++
 				}
 			}

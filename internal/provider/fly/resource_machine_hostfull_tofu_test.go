@@ -191,6 +191,31 @@ func TestMachineHostFull_UntaggedMachineIsNotMarked(t *testing.T) {
 	}
 }
 
+// TestMachineHostFull_UnclassifiedRefusalWarnsInTheApplyOutput holds the
+// signal that Fly moved the refusal off 409 where a run log shows it: the
+// warning diagnostic tofu prints in its normal output, with no TF_LOG. Its
+// negative control is dropping the AddWarning in Update.
+func TestMachineHostFull_UnclassifiedRefusalWarnsInTheApplyOutput(t *testing.T) {
+	t.Parallel()
+	h := newTofuHarness(t)
+
+	h.writeMachines(t, "img:v1")
+	h.mustApply(t)
+	h.fly.refuseUpdateWith(h.fly.live()["1"].id, http.StatusBadRequest)
+
+	h.writeMachines(t, "img:v2")
+	out, err := h.tofu(t, "apply", "-input=false", "-auto-approve", "-no-color")
+	if err == nil {
+		t.Fatalf("apply against a refused update succeeded:\n%s", out)
+	}
+	if !strings.Contains(out, "Warning: "+unclassifiedHostFull) {
+		t.Errorf("apply output has no %q warning:\n%s", unclassifiedHostFull, out)
+	}
+	if got, want := h.planActions(t), map[string]string{"fly_machine.org[1]": "update"}; !mapsEqual(got, want) {
+		t.Errorf("plan after an unclassified refusal = %v, want %v: nothing is marked", got, want)
+	}
+}
+
 // tofuHarness is one work dir driven by the real tofu, with this provider
 // built from source behind a dev override and a fake Machines API.
 type tofuHarness struct {
@@ -387,7 +412,7 @@ type tofuFly struct {
 
 	mu             sync.Mutex
 	machines       map[string]*tofuFlyMachine
-	refused        map[string]bool
+	refused        map[string]int
 	createsRefused bool
 	tagsRefused    bool
 	gone           []string
@@ -401,16 +426,22 @@ type tofuFlyMachine struct {
 
 func newTofuFly(t *testing.T) *tofuFly {
 	t.Helper()
-	f := &tofuFly{machines: map[string]*tofuFlyMachine{}, refused: map[string]bool{}}
+	f := &tofuFly{machines: map[string]*tofuFlyMachine{}, refused: map[string]int{}}
 	f.Server = httptest.NewServer(http.HandlerFunc(f.handle))
 	t.Cleanup(f.Close)
 	return f
 }
 
 func (f *tofuFly) refuseUpdate(id string) {
+	f.refuseUpdateWith(id, http.StatusConflict)
+}
+
+// refuseUpdateWith refuses every update of id with the host-full message
+// under status.
+func (f *tofuFly) refuseUpdateWith(id string, status int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.refused[id] = true
+	f.refused[id] = status
 }
 
 // refuseCreates makes every create answer the way a full host does, or stops.
@@ -532,8 +563,8 @@ func (f *tofuFly) machine(w http.ResponseWriter, r *http.Request, id string, act
 		}
 		m.metadata[action[1]] = body.Value
 		w.WriteHeader(http.StatusNoContent)
-	case len(action) == 0 && r.Method == http.MethodPost && f.refused[id]:
-		writeErr(w, http.StatusConflict, hostFullBody)
+	case len(action) == 0 && r.Method == http.MethodPost && f.refused[id] != 0:
+		writeErr(w, f.refused[id], hostFullBody)
 	case len(action) == 0 && r.Method == http.MethodPost:
 		var body tofuFlyConfig
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {

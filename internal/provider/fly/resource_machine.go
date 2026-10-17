@@ -1221,6 +1221,10 @@ func refreshMountVolumes(model *machineResourceModel, info *flyio.MachineInfo) {
 // machine's replacement. Its value is JSON, as private state requires.
 const privateHostFull = "host_full"
 
+// unclassifiedHostFull is the summary of the warning Update gives for a
+// host-full refusal IsHostFull does not accept.
+const unclassifiedHostFull = "Unclassified Host-Full Refusal"
+
 // metadataReplace is the machine metadata key Update sets, to
 // replaceHostFull, on a machine it marks with privateHostFull. Fly keeps
 // machine names unique per app, so under create_before_destroy a named
@@ -1376,9 +1380,12 @@ func (r *machineResource) Update(ctx context.Context, req resource.UpdateRequest
 		if flyio.QuotesHostFull(err) {
 			// The refusal's text without the 409 that classifies it: nothing
 			// is marked for it, and this is how a change in Fly's status
-			// would first be seen.
-			tflog.Warn(ctx, "host-full refusal under a status the provider does not classify; machine not marked for replacement",
+			// would first be seen. The diagnostic is what reaches a run log;
+			// tflog is written only under TF_LOG.
+			tflog.Warn(ctx, unclassifiedHostFull,
 				map[string]any{"machine_id": machineID, "error": err.Error()})
+			resp.Diagnostics.AddWarning(unclassifiedHostFull,
+				fmt.Sprintf("machine %s was refused with a host-full message under a status the provider does not treat as a full host, so it is not marked for replacement.", machineID))
 		}
 		resp.Diagnostics.AddError("Update Machine Error", err.Error())
 		return
