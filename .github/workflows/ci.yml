@@ -26,6 +26,30 @@ jobs:
           version: v2.13.1
       - run: go test ./...
       - run: go build .
+  # fly_machine's host-full replace rests on tofu mechanics no fake can
+  # stand in for: private state surviving a failed apply, RequiresReplace
+  # honoured only on a changed path, a refused create-before-destroy
+  # restoring the old object. These tests skip without a tofu binary, so this
+  # is the only job that runs them, on the OpenTofu ampbase's runner pins.
+  real-tofu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.12.6
+          tofu_wrapper: false
+      # A green run that skipped them would prove nothing: fail on any skip,
+      # so a test added under the prefix is held without listing it here.
+      - name: host-full replace against real tofu
+        run: |
+          set -euo pipefail
+          TOFU_BINARY="$(command -v tofu)" go test ./internal/provider/fly/ -run 'TestMachineHostFull_' -count=1 -v | tee "$RUNNER_TEMP/out"
+          if grep -q -- '--- SKIP' "$RUNNER_TEMP/out"; then echo "::error::a real-tofu test skipped" >&2; exit 1; fi
+          grep -q -- '--- PASS: TestMachineHostFull_' "$RUNNER_TEMP/out" || { echo "::error::no real-tofu test ran" >&2; exit 1; }
   docs:
     runs-on: ubuntu-latest
     steps:

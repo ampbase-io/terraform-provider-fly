@@ -2141,3 +2141,73 @@ func TestGetMachineStopsAtCallerDeadline(t *testing.T) {
 		t.Errorf("calls = %d, want 1: the caller's deadline ends the read", got)
 	}
 }
+
+// TestQuotesHostFull is IsHostFull without the status: the text under any
+// status, and only on a Machines API response.
+func TestQuotesHostFull(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"under 409", &ResponseError{StatusCode: http.StatusConflict, Body: "could not reserve resource for machine"}, true},
+		{"under 400", &ResponseError{StatusCode: http.StatusBadRequest, Body: "Deploys to this host are temporarily disabled"}, true},
+		{"another refusal", &ResponseError{StatusCode: http.StatusBadRequest, Body: "invalid config"}, false},
+		{"the text outside a response", errors.New("could not reserve resource for machine"), false},
+		{"nil", nil, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := QuotesHostFull(tc.err); got != tc.want {
+				t.Errorf("QuotesHostFull(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestSetMachineMetadata holds the write and its read back: the key lands
+// through the metadata endpoint, not an update, and ListMachines reports it
+// in Metadata, which is where the provider's Create looks for it.
+func TestSetMachineMetadata(t *testing.T) {
+	t.Parallel()
+	var stored map[string]string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/apps/app/machines/m-1/metadata/refused":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"no"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/apps/app/machines/m-1/metadata/tf_replace":
+			var body struct {
+				Value string `json:"value"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			stored = map[string]string{"tf_replace": body.Value}
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/apps/app/machines":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"id": "m-1", "config": map[string]any{"metadata": stored}}})
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusTeapot)
+		}
+	}))
+	defer srv.Close()
+	c := newTestClient(t, WithBaseURL(srv.URL))
+
+	if err := c.SetMachineMetadata(t.Context(), "app", "m-1", "tf_replace", "host_full"); err != nil {
+		t.Fatalf("SetMachineMetadata: %v", err)
+	}
+	ms, err := c.ListMachines(t.Context(), "app")
+	switch {
+	case err != nil:
+		t.Fatalf("ListMachines: %v", err)
+	case len(ms) != 1 || ms[0].Metadata["tf_replace"] != "host_full":
+		t.Errorf("listed %+v, want m-1 carrying tf_replace=host_full", ms)
+	}
+	if err := c.SetMachineMetadata(t.Context(), "app", "m-1", "refused", "x"); err == nil {
+		t.Error("a refused metadata write returned no error")
+	}
+}

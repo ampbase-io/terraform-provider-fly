@@ -1,7 +1,9 @@
 package fly
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -9,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflogtest"
 
 	"github.com/ampbase-io/terraform-provider-fly/flyio"
 )
@@ -17,10 +20,15 @@ import (
 // apply for 18 days: its host had no memory left to take it back.
 const hostFullBody = "aborted: could not reserve resource for machine: insufficient memory available to fulfill request on the current host"
 
-// TestMachineUpdate_HostFullAsksForReplace pins the diagnostic a caller keys
-// its replace on. The counterfactual is the generic "Update Machine Error"
-// that v0.3.1 reported, which no caller can tell apart from a bad config.
-func TestMachineUpdate_HostFullAsksForReplace(t *testing.T) {
+// TestMachineUpdate_HostFullWithAVolumeIsNotReplaced pins the diagnostic for
+// a refusal no replace can fix: a volume places the replacement on the same
+// host, so Update reports the full host and marks nothing. The imported rows
+// carry the volume only on the live machine, as an imported state does; their
+// negative control is dropping the live mounts from Update's guard, which
+// sends them to the marking path. The marking path,
+// which needs the private state only the framework can initialise, is held
+// against real tofu in resource_machine_hostfull_tofu_test.go.
+func TestMachineUpdate_HostFullWithAVolumeIsNotReplaced(t *testing.T) {
 	t.Parallel()
 	s := machineSchema(t)
 
@@ -31,8 +39,77 @@ func TestMachineUpdate_HostFullAsksForReplace(t *testing.T) {
 		wantSummary string
 	}{
 		{"host full is its own diagnostic", http.StatusConflict, hostFullBody, flyio.HostFullSummary},
-		{"host closed to deploys is the same remedy", http.StatusConflict, "deploys to this host are temporarily disabled", flyio.HostFullSummary},
+		{"host closed to deploys is the same refusal", http.StatusConflict, "deploys to this host are temporarily disabled", flyio.HostFullSummary},
 		{"another conflict stays generic", http.StatusConflict, "machine is being replaced", "Update Machine Error"},
+	}
+	for _, tc := range cases {
+		for _, imported := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/imported=%v", tc.name, imported), func(t *testing.T) {
+				t.Parallel()
+				f := newMachinesFake(t)
+				m := f.seed("m-full", "suspended")
+				m.updateStatus = tc.status
+				m.updateBody = tc.body
+				m.mounts = []string{"vol_1"}
+				mounts := []mountModel{{
+					Volume:                 types.StringValue("vol_1"),
+					Path:                   types.StringValue("/data"),
+					Name:                   types.StringNull(),
+					ReadoptOnHostMigration: types.BoolNull(),
+				}}
+				if imported {
+					mounts = nil
+				}
+
+				resp := &resource.UpdateResponse{State: tfsdk.State{Schema: s}}
+				f.resource(t).Update(context.Background(), resource.UpdateRequest{
+					Plan: mkPlan(t, s, machineResourceModel{
+						App:   types.StringValue("app"),
+						Image: types.StringValue("img:v2"),
+					}),
+					State: mkState(t, s, machineResourceModel{
+						ID:    types.StringValue("m-full"),
+						App:   types.StringValue("app"),
+						Image: types.StringValue("img:v1"),
+						Mount: mounts,
+					}),
+				}, resp)
+
+				errs := resp.Diagnostics.Errors()
+				if len(errs) != 1 {
+					t.Fatalf("diagnostics = %v, want exactly one error", resp.Diagnostics)
+				}
+				if got := errs[0].Summary(); got != tc.wantSummary {
+					t.Errorf("summary = %q, want %q", got, tc.wantSummary)
+				}
+				if tc.wantSummary == flyio.HostFullSummary && !strings.Contains(errs[0].Detail(), "has a volume") {
+					t.Errorf("detail = %q, want it to say the volume is why it is not replaced", errs[0].Detail())
+				}
+				if f.startCalled() {
+					t.Errorf("a refused update must not go on to start the machine; calls: %v", f.callPaths())
+				}
+			})
+		}
+	}
+}
+
+// TestMachineUpdate_WarnsOnHostFullTextItDoesNotClassify holds the signal
+// that Fly moved the refusal off 409: the text under any other status marks
+// nothing and is logged at WARN. Its negative control is deleting the WARN in
+// Update's generic error case, which leaves warns at 0 on the first row.
+func TestMachineUpdate_WarnsOnHostFullTextItDoesNotClassify(t *testing.T) {
+	t.Parallel()
+	s := machineSchema(t)
+
+	cases := []struct {
+		name     string
+		status   int
+		body     string
+		wantWarn bool
+	}{
+		{"the text under another status", http.StatusBadRequest, hostFullBody, true},
+		{"the text under the classified status", http.StatusConflict, hostFullBody, false},
+		{"another refusal", http.StatusBadRequest, "invalid config", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -42,31 +119,41 @@ func TestMachineUpdate_HostFullAsksForReplace(t *testing.T) {
 			m.updateStatus = tc.status
 			m.updateBody = tc.body
 
+			var logs bytes.Buffer
+			ctx := tflogtest.RootLogger(context.Background(), &logs)
 			resp := &resource.UpdateResponse{State: tfsdk.State{Schema: s}}
-			f.resource(t).Update(context.Background(), resource.UpdateRequest{
-				Plan: mkPlan(t, s, machineResourceModel{
-					App:   types.StringValue("app"),
-					Image: types.StringValue("img:v2"),
-				}),
+			f.resource(t).Update(ctx, resource.UpdateRequest{
+				Plan: mkPlan(t, s, machineResourceModel{App: types.StringValue("app"), Image: types.StringValue("img:v2")}),
+				// A volume keeps the classified row off the marking path,
+				// whose private state only the framework can initialise.
 				State: mkState(t, s, machineResourceModel{
 					ID:    types.StringValue("m-full"),
 					App:   types.StringValue("app"),
 					Image: types.StringValue("img:v1"),
+					Mount: []mountModel{{
+						Volume:                 types.StringValue("vol_1"),
+						Path:                   types.StringValue("/data"),
+						Name:                   types.StringNull(),
+						ReadoptOnHostMigration: types.BoolNull(),
+					}},
 				}),
 			}, resp)
 
-			errs := resp.Diagnostics.Errors()
-			if len(errs) != 1 {
-				t.Fatalf("diagnostics = %v, want exactly one error", resp.Diagnostics)
+			entries, err := tflogtest.MultilineJSONDecode(&logs)
+			if err != nil {
+				t.Fatalf("decode logs: %v", err)
 			}
-			if got := errs[0].Summary(); got != tc.wantSummary {
-				t.Errorf("summary = %q, want %q", got, tc.wantSummary)
+			warns := 0
+			for _, e := range entries {
+				if e["@level"] == "warn" && fmt.Sprint(e["@message"]) == unclassifiedHostFull {
+					warns++
+				}
 			}
-			if tc.wantSummary == flyio.HostFullSummary && !strings.Contains(errs[0].Detail(), "-replace=") {
-				t.Errorf("detail = %q, want it to name -replace as the remedy", errs[0].Detail())
+			if got := warns == 1; got != tc.wantWarn {
+				t.Errorf("warns = %d, want %v; logs:\n%v", warns, tc.wantWarn, entries)
 			}
-			if f.startCalled() {
-				t.Errorf("a refused update must not go on to start the machine; calls: %v", f.callPaths())
+			if !resp.Diagnostics.HasError() {
+				t.Error("a refused update reported no error")
 			}
 		})
 	}

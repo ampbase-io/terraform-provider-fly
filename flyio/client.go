@@ -480,6 +480,9 @@ type MachineInfo struct {
 	// for the amp app. Empty when the machine has no process-group
 	// metadata.
 	ProcessGroup string
+	// Metadata is the machine's config.metadata, including keys set with
+	// SetMachineMetadata, which update it without an UpdateMachine.
+	Metadata map[string]string
 	// Mounts is the machine's volume mounts as the API currently reports
 	// them. Fly can change the mounted volume out from under Terraform —
 	// a host migration forks the volume to a new ID and re-mounts it —
@@ -536,6 +539,7 @@ func machineInfoFrom(m machines.Machine) MachineInfo {
 	}
 	if m.Config != nil {
 		info.ProcessGroup = m.Config.Metadata["fly_process_group"]
+		info.Metadata = m.Config.Metadata
 		for _, mt := range m.Config.Mounts {
 			mm := MachineMount{}
 			if mt.Volume != nil {
@@ -930,6 +934,31 @@ func (c *Client) StartMachine(ctx context.Context, appName, machineID string) er
 		return nil
 	}
 	return responseError(resp)
+}
+
+// SetMachineMetadata sets one metadata key on a machine. It is the Machines
+// API's own metadata write, not an UpdateMachine, so the machine keeps its
+// config and is not restarted; flyctl tags the machines a blue-green deploy
+// leaves behind the same way (v0.4.118 internal/command/deploy/
+// strategy_bluegreen.go TagBlueMachinesAsSafeForDeletion). Retries on a
+// transient status via retryFlyAPI: writing the same value twice is a no-op.
+func (c *Client) SetMachineMetadata(ctx context.Context, appName, machineID, key, value string) error {
+	_, err := retryFlyAPI(ctx, func() (struct{}, bool, error) {
+		resp, err := c.gen.MachinesUpsertMetadata(ctx, appName, machineID, key, machines.UpsertMetadataKeyRequest{Value: &value})
+		if err != nil {
+			return struct{}{}, false, err
+		}
+		defer func() { _ = resp.Body.Close() }()
+		switch {
+		case resp.StatusCode == http.StatusNoContent, resp.StatusCode == http.StatusOK:
+			return struct{}{}, false, nil
+		case isTransient(resp):
+			return struct{}{}, true, responseError(resp)
+		default:
+			return struct{}{}, false, responseError(resp)
+		}
+	})
+	return err
 }
 
 // StopMachine stops a running machine with the default signal and timeout.
@@ -1676,10 +1705,8 @@ func IsMachineLimit(err error) bool {
 }
 
 // HostFullSummary is the diagnostic summary a machine update reports when
-// IsHostFull matches. It is a contract, not prose: a caller that recovers by
-// replacing the resource (ampbase's runtime apply re-runs with -replace on
-// the diagnostic's address) matches this string, so it changes only with
-// that caller.
+// IsHostFull matches, whether or not the machine is marked for replacement.
+// Callers may match it to tell this refusal from other update failures.
 const HostFullSummary = "Machine Host Full"
 
 // hostFullBodies are the refusals Fly gives when the host a machine is
@@ -1697,8 +1724,8 @@ var hostFullBodies = []string{
 // moves a machine to another host, so retrying the same machine fails the
 // same way until the host frees up; the remedy is a new machine, which Fly
 // places afresh. That holds only for a machine with no volume — a volume pins
-// its replacement to the same host — which is why this reports the condition
-// and leaves the replace to the caller.
+// its replacement to the same host — so the fly_machine resource marks only
+// a volume-less machine for replacement on the next plan.
 //
 // Keyed on 409, the status the spec declares for an update's conflict and
 // the one staging's refusal carried, and then on the body, since 409 also
@@ -1708,7 +1735,17 @@ var hostFullBodies = []string{
 // a false negative leaves.
 func IsHostFull(err error) bool {
 	re, ok := errors.AsType[*ResponseError](err)
-	if !ok || re.StatusCode != http.StatusConflict {
+	return ok && re.StatusCode == http.StatusConflict && QuotesHostFull(err)
+}
+
+// QuotesHostFull reports whether err is a Machines API response whose body
+// carries a host-full refusal, under any status. It is the half of IsHostFull
+// that does not depend on the status, so a caller can notice the refusal
+// arriving under a status IsHostFull does not accept, which is how Fly
+// changing it would first show.
+func QuotesHostFull(err error) bool {
+	re, ok := errors.AsType[*ResponseError](err)
+	if !ok {
 		return false
 	}
 	body := strings.ToLower(re.Body)

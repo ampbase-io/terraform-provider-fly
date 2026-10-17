@@ -23,6 +23,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/ampbase-io/terraform-provider-fly/flyio"
 	"github.com/ampbase-io/terraform-provider-fly/flyio/machines"
@@ -33,6 +34,7 @@ var (
 	_ resource.ResourceWithConfigure    = (*machineResource)(nil)
 	_ resource.ResourceWithImportState  = (*machineResource)(nil)
 	_ resource.ResourceWithUpgradeState = (*machineResource)(nil)
+	_ resource.ResourceWithModifyPlan   = (*machineResource)(nil)
 )
 
 // machineStartTimeout bounds how long Create/Update wait for a machine to
@@ -1055,21 +1057,27 @@ func (r *machineResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	// Idempotent path: machine with this name already exists.
-	// Look it up by listing.
+	// The name is taken. Its holder is either this create's own machine,
+	// whose response was lost (adopt it), or the machine this create
+	// replaces after its host refused it (take the name from it).
 	if m == nil {
-		info, err := r.findMachineByName(ctx, client, appName, plan.Name.ValueString())
-		if err != nil {
+		holder, err := r.findMachineByName(ctx, client, appName, plan.Name.ValueString())
+		switch {
+		case err != nil:
 			resp.Diagnostics.AddError("Find Machine Error", err.Error())
 			return
-		}
-		if info == nil {
+		case holder == nil:
 			resp.Diagnostics.AddError("Find Machine Error", "machine not found after idempotent create")
 			return
+		case !replacingForHostFull(holder):
+			setMachineState(&plan, holder)
+			resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
+			return
 		}
-		setMachineState(&plan, info)
-		resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
-		return
+		if m, err = r.takeName(ctx, appName, holder.ID, input); err != nil {
+			resp.Diagnostics.AddError("Create Machine Error", err.Error())
+			return
+		}
 	}
 
 	plan.ID = types.StringValue(m.ID)
@@ -1208,6 +1216,103 @@ func refreshMountVolumes(model *machineResourceModel, info *flyio.MachineInfo) {
 	}
 }
 
+// privateHostFull is the private-state key Update sets when Fly refuses to
+// take a machine back on its full host, and ModifyPlan reads to plan the
+// machine's replacement. Its value is JSON, as private state requires.
+const privateHostFull = "host_full"
+
+// unclassifiedHostFull is the summary of the warning Update gives for a
+// host-full refusal IsHostFull does not accept.
+const unclassifiedHostFull = "Unclassified Host-Full Refusal"
+
+// metadataReplace is the machine metadata key Update sets, to
+// replaceHostFull, on a machine it marks with privateHostFull. Fly keeps
+// machine names unique per app, so under create_before_destroy a named
+// replacement finds its name held by the machine it replaces; the tag is
+// how Create tells that machine from one its own lost response created.
+// Read never projects metadata into state, so the tag shows as no drift.
+const (
+	metadataReplace = "tf_replace"
+	replaceHostFull = "host_full"
+)
+
+// replacingForHostFull reports whether m is a machine Update tagged for
+// replacement after its host refused it.
+func replacingForHostFull(m *flyio.MachineInfo) bool {
+	return m.Metadata[metadataReplace] == replaceHostFull
+}
+
+// takeName destroys the machine holding a replacement's name and creates
+// the replacement in its place. It is the order flyctl replaces a machine
+// its host refused in (v0.4.118 internal/command/deploy/
+// machines_deploymachinesapp.go updateMachineByReplace), and the only one
+// that keeps the name. The wait for "destroyed", on the settle budget, keeps
+// the create from racing the name's release. When that create fails too, the
+// old machine is already gone: the next refresh drops it from state and the
+// plan after creates it.
+func (r *machineResource) takeName(ctx context.Context, appName, holderID string, input flyio.CreateMachineInput) (*flyio.Machine, error) {
+	client := r.pd.client
+	if err := client.DestroyMachine(ctx, appName, holderID, true); err != nil {
+		return nil, fmt.Errorf("destroy machine %s, which holds the name its replacement needs: %w", holderID, err)
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, machineSettleTimeout)
+	defer cancel()
+	if err := ignoreNotFound(client.WaitForState(waitCtx, appName, holderID, machineStateDestroyed, "")); err != nil {
+		return nil, fmt.Errorf("wait for machine %s to be destroyed: %w", holderID, err)
+	}
+	m, err := client.CreateMachine(ctx, appName, input)
+	switch {
+	case err != nil:
+		return nil, err
+	case m == nil:
+		// CreateMachine reports every non-limit 422 on a named create as the
+		// name being taken, so the config can be what is refused here.
+		return nil, fmt.Errorf("create of %q refused with a 422 after destroying machine %s, which held the name: the name is still taken or the config is invalid", *input.Name, holderID)
+	}
+	return m, nil
+}
+
+// ignoreNotFound treats a machine the API no longer knows as the destroyed
+// machine a wait was for.
+func ignoreNotFound(err error) error {
+	if flyio.IsNotFound(err) {
+		return nil
+	}
+	return err
+}
+
+// ModifyPlan replaces a machine whose last update its host refused (see
+// privateHostFull). Unknown id is what makes the replace a change tofu acts
+// on: it honours RequiresReplace only on a path whose planned value differs
+// from the prior one (opentofu v1.12.6 internal/tofu/
+// node_resource_abstract_instance.go plan, "include only where changes are
+// detected").
+//
+// The mark ends with the machine it was set on. The create half of the
+// replace is planned with it still in private state, but Create starts from
+// empty private data and never reads the planned one (terraform-plugin-
+// framework v1.19.0 internal/fwserver/server_createresource.go
+// CreateResource), so the new machine carries no mark.
+func (r *machineResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
+		return
+	}
+	mark, diags := req.Private.GetKey(ctx, privateHostFull)
+	resp.Diagnostics.Append(diags...)
+	if len(mark) == 0 {
+		return
+	}
+	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("id"), types.StringUnknown())...)
+	resp.RequiresReplace = append(resp.RequiresReplace, path.Root("id"))
+}
+
+// hasVolume reports whether a machine has a volume mounted. It reads the
+// live machine as well as state because an imported machine's state carries
+// no mounts until config adds them.
+func hasVolume(state *machineResourceModel, live *flyio.MachineInfo) bool {
+	return len(state.Mount) > 0 || len(live.Mounts) > 0
+}
+
 func (r *machineResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan machineResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -1248,15 +1353,40 @@ func (r *machineResource) Update(ctx context.Context, req resource.UpdateRequest
 	updateReq := buildUpdateMachineInput(&plan)
 	info, err := client.UpdateMachine(ctx, appName, machineID, updateReq)
 	switch {
-	case flyio.IsHostFull(err):
-		// Update cannot hand back an ID other than the planned one, so the
-		// move to a host with room has to be a replace the caller plans.
+	case flyio.IsHostFull(err) && hasVolume(&state, preUpdate):
+		// A volume pins its machine's replacement to the same host, so
+		// replacing it would be refused the same way.
 		resp.Diagnostics.AddError(flyio.HostFullSummary,
 			fmt.Sprintf("machine %s: its host has no room for it, and the Machines API cannot move a machine to another host. "+
-				"Replace this resource (tofu apply -replace=<address>) to create it on a host with room; "+
-				"a machine with a volume will be placed on the same host again. %s", machineID, err))
+				"It has a volume, which places a replacement on the same host, so it is not replaced. %s", machineID, err))
+		return
+	case flyio.IsHostFull(err):
+		// Update cannot hand back an ID other than the planned one, so the
+		// move to a host with room is a replace, and the next plan makes it:
+		// the mark rides the prior state tofu keeps for a failed apply. The
+		// tag comes first because a named replacement depends on it.
+		if terr := client.SetMachineMetadata(ctx, appName, machineID, metadataReplace, replaceHostFull); terr != nil {
+			resp.Diagnostics.AddError(flyio.HostFullSummary,
+				fmt.Sprintf("machine %s: its host has no room for it, and the Machines API cannot move a machine to another host. "+
+					"Tagging it for replacement failed (%s), so it is not replaced; the next apply tries again. %s", machineID, terr, err))
+			return
+		}
+		resp.Diagnostics.Append(resp.Private.SetKey(ctx, privateHostFull, []byte("true"))...)
+		resp.Diagnostics.AddError(flyio.HostFullSummary,
+			fmt.Sprintf("machine %s: its host has no room for it, and the Machines API cannot move a machine to another host. "+
+				"The next plan replaces it, creating it on a host with room. %s", machineID, err))
 		return
 	case err != nil:
+		if flyio.QuotesHostFull(err) {
+			// The refusal's text without the 409 that classifies it: nothing
+			// is marked for it, and this is how a change in Fly's status
+			// would first be seen. The diagnostic is what reaches a run log;
+			// tflog is written only under TF_LOG.
+			tflog.Warn(ctx, unclassifiedHostFull,
+				map[string]any{"machine_id": machineID, "error": err.Error()})
+			resp.Diagnostics.AddWarning(unclassifiedHostFull,
+				fmt.Sprintf("machine %s was refused with a host-full message under a status the provider does not treat as a full host, so it is not marked for replacement.", machineID))
+		}
 		resp.Diagnostics.AddError("Update Machine Error", err.Error())
 		return
 	}
@@ -2046,6 +2176,8 @@ func setMachineState(model *machineResourceModel, info *flyio.MachineInfo) {
 // machineStateStopped is the desired_state value (and Machines API state)
 // for a parked machine.
 const machineStateStopped = "stopped"
+
+const machineStateDestroyed = "destroyed"
 
 // machineSettleTimeout bounds the wait for a cold machine to come to rest
 // after UpdateMachine. The replacing → stopped transition takes seconds;

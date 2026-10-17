@@ -19,6 +19,7 @@ output-options:
     - Machines_stop
     - Machines_wait
     - Machines_list_events
+    - Machines_upsert_metadata
     - App_IPAssignments_list
     - App_IPAssignments_create
     - App_IPAssignments_delete

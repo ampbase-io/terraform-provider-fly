@@ -69,6 +69,9 @@ type fakeMachine struct {
 	instanceID string
 	region     string
 	privateIP  string
+	// mounts are the volume IDs the API reports mounted, which a machine
+	// imported into state does not carry.
+	mounts []string
 
 	// postUpdateState is the state the machine rests in after an
 	// UpdateMachine, as reported by MachinesShow and MachinesWait. When it
@@ -434,15 +437,23 @@ func (f *machinesFake) handleVolume(w http.ResponseWriter, id string) {
 }
 
 func (m *fakeMachine) wire() machines.Machine {
+	var config *machines.FlyMachineConfig
+	if len(m.mounts) > 0 {
+		config = &machines.FlyMachineConfig{}
+		for _, v := range m.mounts {
+			config.Mounts = append(config.Mounts, machines.FlyMachineMount{Volume: sp(v), Path: sp("/data")})
+		}
+	}
 	return machines.Machine{
+		Config:     config,
 		Id:         sp(m.id),
 		Name:       sp(m.name),
 		InstanceId: sp(m.instanceID),
 		State:      sp(m.state),
 		Region:     sp(m.region),
 		PrivateIp:  sp(m.privateIP),
-		// Config left nil: no checks configured, so WaitForChecks returns
-		// immediately. Concurrency assertions read the request body, not this.
+		// Config carries no checks, so WaitForChecks returns immediately.
+		// Concurrency assertions read the request body, not this.
 	}
 }
 
