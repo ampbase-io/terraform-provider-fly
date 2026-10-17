@@ -17,10 +17,12 @@ import (
 // apply for 18 days: its host had no memory left to take it back.
 const hostFullBody = "aborted: could not reserve resource for machine: insufficient memory available to fulfill request on the current host"
 
-// TestMachineUpdate_HostFullAsksForReplace pins the diagnostic a caller keys
-// its replace on. The counterfactual is the generic "Update Machine Error"
-// that v0.3.1 reported, which no caller can tell apart from a bad config.
-func TestMachineUpdate_HostFullAsksForReplace(t *testing.T) {
+// TestMachineUpdate_HostFullWithAVolumeIsNotReplaced pins the diagnostic for
+// a refusal no replace can fix: a volume places the replacement on the same
+// host, so Update reports the full host and marks nothing. The marking path,
+// which needs the private state only the framework can initialise, is held
+// against real tofu in resource_machine_hostfull_tofu_test.go.
+func TestMachineUpdate_HostFullWithAVolumeIsNotReplaced(t *testing.T) {
 	t.Parallel()
 	s := machineSchema(t)
 
@@ -31,7 +33,7 @@ func TestMachineUpdate_HostFullAsksForReplace(t *testing.T) {
 		wantSummary string
 	}{
 		{"host full is its own diagnostic", http.StatusConflict, hostFullBody, flyio.HostFullSummary},
-		{"host closed to deploys is the same remedy", http.StatusConflict, "deploys to this host are temporarily disabled", flyio.HostFullSummary},
+		{"host closed to deploys is the same refusal", http.StatusConflict, "deploys to this host are temporarily disabled", flyio.HostFullSummary},
 		{"another conflict stays generic", http.StatusConflict, "machine is being replaced", "Update Machine Error"},
 	}
 	for _, tc := range cases {
@@ -52,6 +54,12 @@ func TestMachineUpdate_HostFullAsksForReplace(t *testing.T) {
 					ID:    types.StringValue("m-full"),
 					App:   types.StringValue("app"),
 					Image: types.StringValue("img:v1"),
+					Mount: []mountModel{{
+						Volume:                 types.StringValue("vol_1"),
+						Path:                   types.StringValue("/data"),
+						Name:                   types.StringNull(),
+						ReadoptOnHostMigration: types.BoolNull(),
+					}},
 				}),
 			}, resp)
 
@@ -62,8 +70,8 @@ func TestMachineUpdate_HostFullAsksForReplace(t *testing.T) {
 			if got := errs[0].Summary(); got != tc.wantSummary {
 				t.Errorf("summary = %q, want %q", got, tc.wantSummary)
 			}
-			if tc.wantSummary == flyio.HostFullSummary && !strings.Contains(errs[0].Detail(), "-replace=") {
-				t.Errorf("detail = %q, want it to name -replace as the remedy", errs[0].Detail())
+			if tc.wantSummary == flyio.HostFullSummary && !strings.Contains(errs[0].Detail(), "has a volume") {
+				t.Errorf("detail = %q, want it to say the volume is why it is not replaced", errs[0].Detail())
 			}
 			if f.startCalled() {
 				t.Errorf("a refused update must not go on to start the machine; calls: %v", f.callPaths())

@@ -33,6 +33,7 @@ var (
 	_ resource.ResourceWithConfigure    = (*machineResource)(nil)
 	_ resource.ResourceWithImportState  = (*machineResource)(nil)
 	_ resource.ResourceWithUpgradeState = (*machineResource)(nil)
+	_ resource.ResourceWithModifyPlan   = (*machineResource)(nil)
 )
 
 // machineStartTimeout bounds how long Create/Update wait for a machine to
@@ -1208,6 +1209,36 @@ func refreshMountVolumes(model *machineResourceModel, info *flyio.MachineInfo) {
 	}
 }
 
+// privateHostFull is the private-state key Update sets when Fly refuses to
+// take a machine back on its full host, and ModifyPlan reads to plan the
+// machine's replacement. Its value is JSON, as private state requires.
+const privateHostFull = "host_full"
+
+// ModifyPlan replaces a machine whose last update its host refused (see
+// privateHostFull). Unknown id is what makes the replace a change tofu acts
+// on: it honours RequiresReplace only on a path whose planned value differs
+// from the prior one (opentofu v1.12.6 internal/tofu/
+// node_resource_abstract_instance.go plan, "include only where changes are
+// detected").
+//
+// The mark ends with the machine it was set on. The create half of the
+// replace is planned with it still in private state, but Create starts from
+// empty private data and never reads the planned one (terraform-plugin-
+// framework v1.19.0 internal/fwserver/server_createresource.go
+// CreateResource), so the new machine carries no mark.
+func (r *machineResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.Plan.Raw.IsNull() || req.State.Raw.IsNull() {
+		return
+	}
+	mark, diags := req.Private.GetKey(ctx, privateHostFull)
+	resp.Diagnostics.Append(diags...)
+	if len(mark) == 0 {
+		return
+	}
+	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("id"), types.StringUnknown())...)
+	resp.RequiresReplace = append(resp.RequiresReplace, path.Root("id"))
+}
+
 func (r *machineResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 	var plan machineResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
@@ -1248,13 +1279,21 @@ func (r *machineResource) Update(ctx context.Context, req resource.UpdateRequest
 	updateReq := buildUpdateMachineInput(&plan)
 	info, err := client.UpdateMachine(ctx, appName, machineID, updateReq)
 	switch {
-	case flyio.IsHostFull(err):
-		// Update cannot hand back an ID other than the planned one, so the
-		// move to a host with room has to be a replace the caller plans.
+	case flyio.IsHostFull(err) && len(state.Mount) > 0:
+		// A volume pins its machine's replacement to the same host, so
+		// replacing it would be refused the same way.
 		resp.Diagnostics.AddError(flyio.HostFullSummary,
 			fmt.Sprintf("machine %s: its host has no room for it, and the Machines API cannot move a machine to another host. "+
-				"Replace this resource (tofu apply -replace=<address>) to create it on a host with room; "+
-				"a machine with a volume will be placed on the same host again. %s", machineID, err))
+				"It has a volume, which places a replacement on the same host, so it is not replaced. %s", machineID, err))
+		return
+	case flyio.IsHostFull(err):
+		// Update cannot hand back an ID other than the planned one, so the
+		// move to a host with room is a replace, and the next plan makes it:
+		// the mark rides the prior state tofu keeps for a failed apply.
+		resp.Diagnostics.Append(resp.Private.SetKey(ctx, privateHostFull, []byte("true"))...)
+		resp.Diagnostics.AddError(flyio.HostFullSummary,
+			fmt.Sprintf("machine %s: its host has no room for it, and the Machines API cannot move a machine to another host. "+
+				"The next plan replaces it, creating it on a host with room. %s", machineID, err))
 		return
 	case err != nil:
 		resp.Diagnostics.AddError("Update Machine Error", err.Error())
