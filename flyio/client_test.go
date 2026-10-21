@@ -2303,3 +2303,32 @@ func TestDeleteAppRefusalPastTheWindowIsReturned(t *testing.T) {
 		t.Fatal("DeleteApp ran until the test's deadline, not the window")
 	}
 }
+
+// The wait past the first refusal is what the provider reports, so a delete
+// Fly accepts at once reports none and one it refused reports some.
+// Negative control: never set refused, and the refused delete reports zero.
+func TestDeleteAppReportingRefusalsMeasuresTheWait(t *testing.T) {
+	shortenAppDeleteBackoff(t, time.Minute)
+	for _, refusals := range []int32{0, 2} {
+		var calls atomic.Int32
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			if calls.Add(1) <= refusals {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(crossOrgRefusal))
+				return
+			}
+			w.WriteHeader(http.StatusAccepted)
+		}))
+		c := newTestClient(t, WithBaseURL(srv.URL))
+		waited, err := c.DeleteAppReportingRefusals(t.Context(), "ampbase-org-abc")
+		srv.Close()
+		switch {
+		case err != nil:
+			t.Fatalf("%d refusals: DeleteAppReportingRefusals: %v", refusals, err)
+		case refusals == 0 && waited != 0:
+			t.Errorf("accepted at once: waited %s, want 0", waited)
+		case refusals > 0 && waited <= 0:
+			t.Errorf("%d refusals: waited %s, want the time past the first", refusals, waited)
+		}
+	}
+}

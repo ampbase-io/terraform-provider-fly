@@ -211,7 +211,17 @@ func (c *Client) CreateApp(ctx context.Context, input CreateAppInput) error {
 // retries; any other refusal is final. Each refused attempt is logged with
 // its elapsed time, which is how the propagation lag gets measured.
 func (c *Client) DeleteApp(ctx context.Context, appName string) error {
+	_, err := c.DeleteAppReportingRefusals(ctx, appName)
+	return err
+}
+
+// DeleteAppReportingRefusals is DeleteApp, also returning how long it spent
+// past the first cross-org refusal: zero when Fly accepted the first delete.
+// The provider surfaces it as a warning, which tofu prints without TF_LOG,
+// so the propagation lag reaches the run log.
+func (c *Client) DeleteAppReportingRefusals(ctx context.Context, appName string) (time.Duration, error) {
 	start := time.Now()
+	var refused time.Time
 	_, err := backoff.Retry(ctx, func() (struct{}, error) {
 		resp, err := c.gen.AppsDelete(ctx, appName)
 		if err != nil {
@@ -225,6 +235,9 @@ func (c *Client) DeleteApp(ctx context.Context, appName string) error {
 		err = responseError(resp)
 		switch {
 		case isCrossOrgRefusal(err):
+			if refused.IsZero() {
+				refused = time.Now()
+			}
 			tflog.Warn(ctx, "app delete refused for its org; retrying while a cross-org Flycast IP's release propagates",
 				map[string]any{"app": appName, "elapsed": time.Since(start).String()})
 			return struct{}{}, err
@@ -233,7 +246,10 @@ func (c *Client) DeleteApp(ctx context.Context, appName string) error {
 		}
 		return struct{}{}, backoff.Permanent(err)
 	}, backoff.WithBackOff(newAppDeleteBackoff()), backoff.WithMaxElapsedTime(appDeleteRefusalWindow))
-	return err
+	if refused.IsZero() {
+		return 0, err
+	}
+	return time.Since(refused), err
 }
 
 // appDeleteRefusalWindow is how long DeleteApp retries the cross-org

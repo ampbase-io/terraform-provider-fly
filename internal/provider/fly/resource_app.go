@@ -3,6 +3,7 @@ package fly
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -207,7 +208,15 @@ func (r *appResource) Delete(ctx context.Context, req resource.DeleteRequest, re
 
 	client := r.pd.client
 
-	if err := client.DeleteApp(ctx, state.Name.ValueString()); err != nil {
+	waited, err := client.DeleteAppReportingRefusals(ctx, state.Name.ValueString())
+	switch {
+	case err != nil:
 		resp.Diagnostics.AddError("Delete App Error", err.Error())
+	case waited > 0:
+		// A warning rather than a log line: tofu prints warnings without
+		// TF_LOG, so the cross-org refusal's lag reaches the run log.
+		resp.Diagnostics.AddWarning("Delete App Retried",
+			fmt.Sprintf("Fly refused deleting %s for its org (a cross-org Flycast IP's release still propagating) and accepted it %s later.",
+				state.Name.ValueString(), waited.Round(time.Second)))
 	}
 }
