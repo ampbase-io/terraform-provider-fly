@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -292,5 +293,54 @@ func TestApp_NumericIDIsNotConfigurable(t *testing.T) {
 	}
 	if !attr.Computed {
 		t.Error("internal_numeric_id is not Computed; nothing would populate it")
+	}
+}
+
+// A delete Fly refused for a cross-org Flycast IP and then accepted ends in
+// a warning naming the wait, since tofu prints warnings without TF_LOG and
+// that is how the lag reaches the run log. Negative control: drop the
+// warning case, and the diagnostics are empty.
+func TestApp_DeleteAfterACrossOrgRefusalWarnsWithTheWait(t *testing.T) {
+	t.Parallel()
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			http.NotFound(w, r)
+			return
+		}
+		if calls.Add(1) == 1 {
+			writeErr(w, http.StatusUnauthorized, "Not authorized to access this organization")
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	t.Cleanup(srv.Close)
+	client, err := flyio.New("provider-org", flyio.WithToken("t"), flyio.WithBaseURL(srv.URL))
+	if err != nil {
+		t.Fatalf("client: %v", err)
+	}
+	r := &appResource{pd: &providerData{client: client, orgSlug: "provider-org"}}
+	s := appSchema(t)
+	st := tfsdk.State{Schema: s}
+	if diags := st.Set(context.Background(), &appResourceModel{
+		Name:              types.StringValue("ampbase-org-abc"),
+		Org:               types.StringValue("provider-org"),
+		Network:           types.StringNull(),
+		ID:                types.StringValue("app-ampbase-org-abc"),
+		InternalNumericID: types.Int64Value(appNumericID),
+	}); diags.HasError() {
+		t.Fatalf("build state: %v", diags)
+	}
+
+	resp := &resource.DeleteResponse{}
+	r.Delete(context.Background(), resource.DeleteRequest{State: st}, resp)
+	switch {
+	case resp.Diagnostics.HasError():
+		t.Fatalf("delete errored: %v", resp.Diagnostics)
+	case resp.Diagnostics.WarningsCount() != 1:
+		t.Fatalf("diagnostics = %v, want one warning naming the wait", resp.Diagnostics)
+	}
+	if got := resp.Diagnostics.Warnings()[0].Summary(); got != "Delete App Retried" {
+		t.Errorf("warning summary = %q, want %q", got, "Delete App Retried")
 	}
 }
