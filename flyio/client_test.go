@@ -2211,3 +2211,95 @@ func TestSetMachineMetadata(t *testing.T) {
 		t.Error("a refused metadata write returned no error")
 	}
 }
+
+// shortenAppDeleteBackoff makes DeleteApp's refusal retries millisecond-scale
+// and its window short, for the length of a test.
+func shortenAppDeleteBackoff(t *testing.T, window time.Duration) {
+	t.Helper()
+	origBackoff, origWindow := newAppDeleteBackoff, appDeleteRefusalWindow
+	newAppDeleteBackoff = func() backoff.BackOff {
+		b := backoff.NewExponentialBackOff()
+		b.InitialInterval = time.Millisecond
+		b.MaxInterval = time.Millisecond
+		b.RandomizationFactor = 0
+		return b
+	}
+	appDeleteRefusalWindow = window
+	t.Cleanup(func() { newAppDeleteBackoff, appDeleteRefusalWindow = origBackoff, origWindow })
+}
+
+const crossOrgRefusal = `{"error":"Not authorized to access this organization"}`
+
+// An app that held a cross-org Flycast IP is refused until the IP's release
+// propagates, and the delete then succeeds with the same token (ampbase
+// RFC-033 TR122). Negative control: drop the isCrossOrgRefusal case, and the
+// first refusal is final.
+func TestDeleteAppRetriesTheCrossOrgRefusal(t *testing.T) {
+	shortenAppDeleteBackoff(t, time.Minute)
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete || r.URL.Path != "/v1/apps/ampbase-org-abc" {
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+		if calls.Add(1) < 3 {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(crossOrgRefusal))
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, WithBaseURL(srv.URL))
+	if err := c.DeleteApp(t.Context(), "ampbase-org-abc"); err != nil {
+		t.Fatalf("DeleteApp: %v", err)
+	}
+	if n := calls.Load(); n != 3 {
+		t.Errorf("%d delete attempts, want 3: two refused, one accepted", n)
+	}
+}
+
+// Any other 401 is a token the API will keep refusing, and is final on the
+// first attempt. Negative control: match on the status alone, and this one
+// is retried too.
+func TestDeleteAppOtherUnauthorizedIsFinal(t *testing.T) {
+	shortenAppDeleteBackoff(t, time.Minute)
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"token has expired"}`))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, WithBaseURL(srv.URL))
+	err := c.DeleteApp(t.Context(), "ampbase-org-abc")
+	if re, ok := errors.AsType[*ResponseError](err); !ok || re.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("DeleteApp = %v, want the 401", err)
+	}
+	if n := calls.Load(); n != 1 {
+		t.Errorf("%d delete attempts, want 1", n)
+	}
+}
+
+// A refusal that outlasts the window is returned, so the caller's own retry
+// takes over. Negative control: drop WithMaxElapsedTime, and this never
+// returns.
+func TestDeleteAppRefusalPastTheWindowIsReturned(t *testing.T) {
+	shortenAppDeleteBackoff(t, 20*time.Millisecond)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(crossOrgRefusal))
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, WithBaseURL(srv.URL))
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	if err := c.DeleteApp(ctx, "ampbase-org-abc"); !isCrossOrgRefusal(err) {
+		t.Fatalf("DeleteApp = %v, want the cross-org refusal once the window closes", err)
+	}
+	if ctx.Err() != nil {
+		t.Fatal("DeleteApp ran until the test's deadline, not the window")
+	}
+}

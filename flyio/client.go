@@ -16,6 +16,7 @@ import (
 	"time"
 
 	backoff "github.com/cenkalti/backoff/v5"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/ampbase-io/terraform-provider-fly/flyio/machines"
 )
@@ -199,17 +200,69 @@ func (c *Client) CreateApp(ctx context.Context, input CreateAppInput) error {
 	return err
 }
 
-// DeleteApp deletes a Fly.io app. Idempotent: returns nil if the app does not exist.
+// DeleteApp deletes the app; one already gone is success.
+//
+// Fly refuses the delete of an app that held a Flycast IP allocated in
+// another org with 401 "Not authorized to access this organization" until
+// the IP's release has propagated, though the IP was released first in the
+// same apply and the token can delete the app (ampbase RFC-033 TR122: the
+// same token deletes it on a later run). That refusal is retried for
+// appDeleteRefusalWindow, as are the transient statuses every Machines call
+// retries; any other refusal is final. Each refused attempt is logged with
+// its elapsed time, which is how the propagation lag gets measured.
 func (c *Client) DeleteApp(ctx context.Context, appName string) error {
-	resp, err := c.gen.AppsDelete(ctx, appName)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode == http.StatusAccepted || resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotFound {
-		return nil
-	}
-	return responseError(resp)
+	start := time.Now()
+	_, err := backoff.Retry(ctx, func() (struct{}, error) {
+		resp, err := c.gen.AppsDelete(ctx, appName)
+		if err != nil {
+			return struct{}{}, backoff.Permanent(err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		switch resp.StatusCode {
+		case http.StatusAccepted, http.StatusNoContent, http.StatusNotFound:
+			return struct{}{}, nil
+		}
+		err = responseError(resp)
+		switch {
+		case isCrossOrgRefusal(err):
+			tflog.Warn(ctx, "app delete refused for its org; retrying while a cross-org Flycast IP's release propagates",
+				map[string]any{"app": appName, "elapsed": time.Since(start).String()})
+			return struct{}{}, err
+		case isTransient(resp):
+			return struct{}{}, err
+		}
+		return struct{}{}, backoff.Permanent(err)
+	}, backoff.WithBackOff(newAppDeleteBackoff()), backoff.WithMaxElapsedTime(appDeleteRefusalWindow))
+	return err
+}
+
+// appDeleteRefusalWindow is how long DeleteApp retries the cross-org
+// refusal. Not measured yet: the lag is known only to be under the 15
+// minutes after which ampbase's next destroy has deleted every such app.
+// Five minutes is a third of the 15 an ampbase run's token budgets for its
+// own work (its flytoken.TTL is 20), leaving the rest of the destroy room.
+// When it binds, the delete fails as it did before this retry, and the
+// caller's own retry takes over.
+var appDeleteRefusalWindow = 5 * time.Minute
+
+// newAppDeleteBackoff is the schedule inside appDeleteRefusalWindow: the
+// Machines API's own start, capped at 30 seconds so the window holds about
+// ten attempts and the logged elapsed times bound the lag closely. A package
+// var so tests can shorten it.
+var newAppDeleteBackoff = func() backoff.BackOff {
+	b := backoff.NewExponentialBackOff()
+	b.InitialInterval = 2 * time.Second
+	b.MaxInterval = 30 * time.Second
+	return b
+}
+
+// isCrossOrgRefusal reports Fly's refusal of an app delete against the org a
+// cross-org Flycast IP was allocated in. Matched on the message as well as
+// the status, so a 401 for any other reason stays final.
+func isCrossOrgRefusal(err error) bool {
+	re, ok := errors.AsType[*ResponseError](err)
+	return ok && (re.StatusCode == http.StatusUnauthorized || re.StatusCode == http.StatusForbidden) &&
+		strings.Contains(re.Body, "Not authorized to access this organization")
 }
 
 // CreateMachine creates a machine in the given app. When a Name is set on
