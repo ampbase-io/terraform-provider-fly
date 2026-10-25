@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -108,6 +109,7 @@ type machineResourceModel struct {
 	File              []fileModel         `tfsdk:"file"`
 	Mount             []mountModel        `tfsdk:"mount"`
 	Restart           *restartModel       `tfsdk:"restart"`
+	StopConfig        *stopConfigModel    `tfsdk:"stop_config"`
 	Container         []containerModel    `tfsdk:"container"`
 	Metrics           *metricsModel       `tfsdk:"metrics"`
 	Check             []machineCheckModel `tfsdk:"check"`
@@ -140,6 +142,11 @@ type mountModel struct {
 type restartModel struct {
 	Policy     types.String `tfsdk:"policy"`
 	MaxRetries types.Int64  `tfsdk:"max_retries"`
+}
+
+type stopConfigModel struct {
+	Signal  types.String `tfsdk:"signal"`
+	Timeout types.String `tfsdk:"timeout"`
 }
 
 type serviceModel struct {
@@ -625,6 +632,25 @@ func (r *machineResource) Schema(_ context.Context, _ resource.SchemaRequest, re
 					"max_retries": schema.Int64Attribute{
 						Description: "Maximum restart attempts when policy is \"on-failure\". Ignored for other policies.",
 						Optional:    true,
+					},
+				},
+			},
+			"stop_config": schema.SingleNestedBlock{
+				Description: "How Fly stops the machine: the signal its process receives and how long Fly waits for it to exit before a hard kill. Fly's defaults are SIGINT and 5 seconds (fly.toml's `kill_signal` and `kill_timeout`), and Fly treats both as best-effort. A process that finishes work on a stop, such as a CI agent completing its job, needs SIGTERM and a longer timeout here.",
+				Attributes: map[string]schema.Attribute{
+					"signal": schema.StringAttribute{
+						Description: "Signal sent to the machine's process on stop: \"SIGINT\", \"SIGTERM\", \"SIGQUIT\", \"SIGHUP\", \"SIGUSR1\", \"SIGUSR2\" or \"SIGKILL\".",
+						Optional:    true,
+						Validators: []validator.String{
+							stringvalidator.OneOf("SIGINT", "SIGTERM", "SIGQUIT", "SIGHUP", "SIGUSR1", "SIGUSR2", "SIGKILL"),
+						},
+					},
+					"timeout": schema.StringAttribute{
+						Description: "How long Fly waits after the signal before a hard kill, as a duration in seconds or minutes such as \"30s\" or \"5m\". Fly caps it at 300 seconds.",
+						Optional:    true,
+						Validators: []validator.String{
+							stringvalidator.RegexMatches(regexp.MustCompile(`^[0-9]+(s|m)$`), "a duration in seconds or minutes, such as \"30s\" or \"5m\""),
+						},
 					},
 				},
 			},
@@ -1567,6 +1593,7 @@ func buildCreateMachineInput(plan *machineResourceModel) flyio.CreateMachineInpu
 	input.Config.Files = buildFiles(plan.File)
 	input.Config.Mounts = buildMounts(plan.Mount)
 	input.Config.Restart = buildRestart(plan.Restart)
+	input.Config.StopConfig = buildStopConfig(plan.StopConfig)
 	input.Config.Containers = buildContainers(plan.Container)
 	input.Config.Metrics = buildMetrics(plan.Metrics)
 	input.Config.Checks = buildChecks(plan.Check)
@@ -1614,6 +1641,7 @@ func buildUpdateMachineInput(plan *machineResourceModel) machines.UpdateMachineR
 	req.Config.Files = buildFiles(plan.File)
 	req.Config.Mounts = buildMounts(plan.Mount)
 	req.Config.Restart = buildRestart(plan.Restart)
+	req.Config.StopConfig = buildStopConfig(plan.StopConfig)
 	req.Config.Containers = buildContainers(plan.Container)
 	req.Config.Metrics = buildMetrics(plan.Metrics)
 	req.Config.Checks = buildChecks(plan.Check)
@@ -2156,6 +2184,24 @@ func buildRestart(r *restartModel) *machines.FlyMachineRestart {
 		out.MaxRetries = &v
 	}
 	if out.Policy == nil && out.MaxRetries == nil {
+		return nil
+	}
+	return out
+}
+
+func buildStopConfig(m *stopConfigModel) *machines.FlyStopConfig {
+	if m == nil {
+		return nil
+	}
+	out := &machines.FlyStopConfig{}
+	if !m.Signal.IsNull() && !m.Signal.IsUnknown() {
+		sig := machines.FlyStopConfigSignal(m.Signal.ValueString())
+		out.Signal = &sig
+	}
+	if !m.Timeout.IsNull() && !m.Timeout.IsUnknown() {
+		out.Timeout = new(m.Timeout.ValueString())
+	}
+	if out.Signal == nil && out.Timeout == nil {
 		return nil
 	}
 	return out

@@ -91,6 +91,7 @@ Avoid `create_before_destroy` on a machine with mounts: Fly forbids two machines
 - `region` (String) Fly.io region (e.g. "iad", "ord").
 - `restart` (Block, Optional) Machine restart policy. Defaults to Fly's default ("on-failure" with 10 max retries) when unset. (see [below for nested schema](#nestedblock--restart))
 - `service` (Block List) Fly proxy service configuration. Required for Flycast routing. (see [below for nested schema](#nestedblock--service))
+- `stop_config` (Block, Optional) How Fly stops the machine: the signal its process receives and how long Fly waits for it to exit before a hard kill. Fly's defaults are SIGINT and 5 seconds (fly.toml's `kill_signal` and `kill_timeout`), and Fly treats both as best-effort. A process that finishes work on a stop, such as a CI agent completing its job, needs SIGTERM and a longer timeout here. (see [below for nested schema](#nestedblock--stop_config))
 
 ### Read-Only
 
@@ -348,3 +349,13 @@ Required:
 Optional:
 
 - `handlers` (List of String) Protocol handlers (e.g. ["http"]).
+
+
+
+<a id="nestedblock--stop_config"></a>
+### Nested Schema for `stop_config`
+
+Optional:
+
+- `signal` (String) Signal sent to the machine's process on stop: "SIGINT", "SIGTERM", "SIGQUIT", "SIGHUP", "SIGUSR1", "SIGUSR2" or "SIGKILL".
+- `timeout` (String) How long Fly waits after the signal before a hard kill, as a duration in seconds or minutes such as "30s" or "5m". Fly caps it at 300 seconds.
