@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -145,6 +146,12 @@ func (r *volumeResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 				Description: "How many days to keep auto-snapshots. Range 1-60, default 5 (set by Fly). Updateable in place; new retention applies to future snapshots only.",
 				Optional:    true,
 				Computed:    true,
+				// Fly sets the default, so an unset config keeps whatever the
+				// volume has rather than planning it unknown on every other
+				// change to the resource.
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 			},
 			"require_unique_zone": schema.BoolAttribute{
 				Description: "When true (Fly's default), the volume is placed on hardware that doesn't already host another volume **with the same name**. Combine with a shared `name` and `count = N` to spread N replicas across distinct hardware zones (Fly's documented HA recipe). For distinct per-machine names, set `unique_zone_app_wide` instead. Set to false if you have more replicas than the region has hardware zones — Fly will collapse onto shared hosts.",
@@ -530,7 +537,9 @@ func (r *volumeResource) Update(ctx context.Context, req resource.UpdateRequest,
 		v := plan.AutoBackupEnabled.ValueBool()
 		autoBackup = &v
 	}
-	if !plan.SnapshotRetention.IsNull() && plan.SnapshotRetention.ValueInt64() != state.SnapshotRetention.ValueInt64() {
+	// An unknown retention reads as 0, which Fly rejects (the range is 1-60),
+	// so only a known value that differs from the state is a change.
+	if !plan.SnapshotRetention.IsNull() && !plan.SnapshotRetention.IsUnknown() && plan.SnapshotRetention.ValueInt64() != state.SnapshotRetention.ValueInt64() {
 		v := int(plan.SnapshotRetention.ValueInt64())
 		snapshotRetention = &v
 	}
