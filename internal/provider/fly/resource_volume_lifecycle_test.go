@@ -2,6 +2,7 @@ package fly
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -25,8 +26,9 @@ import (
 type volumesFake struct {
 	srv *httptest.Server
 
-	mu   sync.Mutex
-	vols map[string]flyio.VolumeInfo // id -> volume; absent id => 404
+	mu      sync.Mutex
+	vols    map[string]flyio.VolumeInfo // id -> volume; absent id => 404
+	updates []map[string]any            // bodies of PUT /apps/{app}/volumes/{id}, in order
 }
 
 func newVolumesFake(t *testing.T) *volumesFake {
@@ -63,6 +65,48 @@ func (f *volumesFake) handle(w http.ResponseWriter, r *http.Request) {
 			out = append(out, volWire(v))
 		}
 		writeJSON(w, http.StatusOK, out)
+	case len(parts) == 5 && parts[2] == "volumes" && parts[4] == "extend": // PUT /apps/{app}/volumes/{id}/extend
+		v, ok := f.vols[parts[3]]
+		if !ok {
+			writeErr(w, http.StatusNotFound, "volume not found")
+			return
+		}
+		var body struct {
+			SizeGB int `json:"size_gb"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		v.SizeGB = body.SizeGB
+		f.vols[v.ID] = v
+		writeJSON(w, http.StatusOK, map[string]any{"needs_restart": false, "volume": volWire(v)})
+	case len(parts) == 4 && parts[2] == "volumes" && r.Method == http.MethodPut: // PUT /apps/{app}/volumes/{id}
+		v, ok := f.vols[parts[3]]
+		if !ok {
+			writeErr(w, http.StatusNotFound, "volume not found")
+			return
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		f.updates = append(f.updates, body)
+		// Fly's validation: an update that carries a retention outside 1-60
+		// is refused, and the provider has sent 0 here for an unknown.
+		if retention, ok := body["snapshot_retention"].(float64); ok {
+			if retention < 1 || retention > 60 {
+				writeErr(w, http.StatusBadRequest, "snapshot_retention must be between 1 and 60 inclusive")
+				return
+			}
+			v.SnapshotRetention = int(retention)
+		}
+		if enabled, ok := body["auto_backup_enabled"].(bool); ok {
+			v.AutoBackupEnabled = enabled
+		}
+		f.vols[v.ID] = v
+		writeJSON(w, http.StatusOK, volWire(v))
 	case len(parts) == 4 && parts[2] == "volumes": // GET /apps/{app}/volumes/{id}
 		v, ok := f.vols[parts[3]]
 		if !ok {
@@ -84,6 +128,8 @@ func volWire(v flyio.VolumeInfo) map[string]any {
 		"state":               v.State,
 		"zone":                v.Zone,
 		"attached_machine_id": v.AttachedMachineID,
+		"auto_backup_enabled": v.AutoBackupEnabled,
+		"snapshot_retention":  v.SnapshotRetention,
 	}
 }
 
@@ -285,6 +331,54 @@ func TestVolumeUpdate_UsesPlanID(t *testing.T) {
 	}
 	if out.ID.ValueString() != "vol_new" {
 		t.Errorf("persisted id = %q, want vol_new", out.ID.ValueString())
+	}
+}
+
+// TestVolumeUpdate_SizeOnlyLeavesRetention pins the fix for a size-only
+// change failing with "snapshot_retention must be between 1 and 60": with
+// snapshot_retention unset in config, the framework plans the computed
+// value unknown on any update, and an unknown Int64 reads as 0. Update
+// must extend the volume and send no retention at all.
+func TestVolumeUpdate_SizeOnlyLeavesRetention(t *testing.T) {
+	t.Parallel()
+	s := volumeSchema(t)
+	f := newVolumesFake(t)
+	f.add(flyio.VolumeInfo{ID: "vol_1", Name: "ci_cache_1", SizeGB: 50, Zone: "b1ce", State: "created", AutoBackupEnabled: true, SnapshotRetention: 5})
+	r := f.resource(t)
+
+	state := volumeResourceModel{
+		ID:                types.StringValue("vol_1"),
+		App:               types.StringValue("app"),
+		Name:              types.StringValue("ci_cache_1"),
+		SizeGB:            types.Int64Value(50),
+		AutoBackupEnabled: types.BoolValue(true),
+		SnapshotRetention: types.Int64Value(5),
+	}
+	plan := state
+	plan.SizeGB = types.Int64Value(100)
+	plan.SnapshotRetention = types.Int64Unknown()
+
+	resp := &resource.UpdateResponse{State: tfsdk.State{Schema: s}}
+	r.Update(context.Background(), resource.UpdateRequest{
+		Plan:  mkVolPlan(t, s, plan),
+		State: mkVolState(t, s, state),
+	}, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("Update errored (sent the unknown retention as 0?): %v", resp.Diagnostics)
+	}
+	if len(f.updates) != 0 {
+		t.Errorf("PUT /volumes/{id} bodies = %v, want none for a size-only change", f.updates)
+	}
+	var out volumeResourceModel
+	if diags := resp.State.Get(context.Background(), &out); diags.HasError() {
+		t.Fatalf("read state: %v", diags)
+	}
+	if out.SizeGB.ValueInt64() != 100 {
+		t.Errorf("persisted size_gb = %d, want 100", out.SizeGB.ValueInt64())
+	}
+	if out.SnapshotRetention.ValueInt64() != 5 {
+		t.Errorf("persisted snapshot_retention = %d, want Fly's 5", out.SnapshotRetention.ValueInt64())
 	}
 }
 
