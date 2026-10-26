@@ -657,6 +657,45 @@ func TestBuildCreateMachineInput_MountsAndRestart(t *testing.T) {
 	}
 }
 
+// TestBuildMachineConfig_StopConfig locks in that the stop_config block
+// reaches FlyMachineConfig.StopConfig on both the create and the update
+// path, and that an absent block sends nothing, leaving Fly's defaults
+// (SIGINT, 5s) in force rather than an empty object.
+func TestBuildMachineConfig_StopConfig(t *testing.T) {
+	plan := &machineResourceModel{
+		App:   types.StringValue("ampbase-buildkite-agents"),
+		Image: types.StringValue("img:latest"),
+		StopConfig: &stopConfigModel{
+			Signal:  types.StringValue("SIGTERM"),
+			Timeout: types.StringValue("300s"),
+		},
+	}
+
+	created := buildCreateMachineInput(plan)
+	updated := buildUpdateMachineInput(plan)
+	for name, got := range map[string]*machines.FlyStopConfig{
+		"create": created.Config.StopConfig,
+		"update": updated.Config.StopConfig,
+	} {
+		if got == nil || got.Signal == nil || string(*got.Signal) != "SIGTERM" {
+			t.Errorf("%s: stop_config signal = %v, want SIGTERM", name, got)
+			continue
+		}
+		if got.Timeout == nil || *got.Timeout != "300s" {
+			t.Errorf("%s: stop_config timeout = %v, want 300s", name, got.Timeout)
+		}
+	}
+
+	plan.StopConfig = nil
+	if got := buildCreateMachineInput(plan).Config.StopConfig; got != nil {
+		t.Errorf("no stop_config block: sent %+v, want nothing", got)
+	}
+	plan.StopConfig = &stopConfigModel{}
+	if got := buildCreateMachineInput(plan).Config.StopConfig; got != nil {
+		t.Errorf("empty stop_config block: sent %+v, want nothing", got)
+	}
+}
+
 // TestBuildCreateMachineInput_Metadata locks in that the metadata map
 // (and specifically fly_process_group, which controls
 // <group>.process.<app>.internal DNS) is forwarded to FlyMachineConfig.
