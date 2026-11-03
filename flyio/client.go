@@ -541,9 +541,14 @@ type MachineInfo struct {
 	InstanceID string // unique per version of the machine; changes on every update
 	State      string // "started", "stopped", "created", "destroyed"
 	HostStatus string // "ok", "unreachable", "unknown"
-	ImageRef   MachineImageRef
-	Region     string
-	PrivateIP  string
+	// Image is the config's image as the machine holds it: what the last
+	// accepted create or update named, whatever instance is running. It is
+	// how a caller tells an update that landed from one that did not, which
+	// ImageRef cannot, since that is the resolved digest of whatever runs.
+	Image     string
+	ImageRef  MachineImageRef
+	Region    string
+	PrivateIP string
 	// ProcessGroup is the Fly process group from machine metadata
 	// (config.metadata["fly_process_group"]) — e.g. "api" or "worker"
 	// for the amp app. Empty when the machine has no process-group
@@ -607,6 +612,9 @@ func machineInfoFrom(m machines.Machine) MachineInfo {
 		info.PrivateIP = *m.PrivateIp
 	}
 	if m.Config != nil {
+		if m.Config.Image != nil {
+			info.Image = *m.Config.Image
+		}
 		info.ProcessGroup = m.Config.Metadata["fly_process_group"]
 		info.Metadata = m.Config.Metadata
 		for _, mt := range m.Config.Mounts {

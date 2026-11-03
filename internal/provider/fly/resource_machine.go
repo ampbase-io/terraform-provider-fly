@@ -38,13 +38,34 @@ var (
 	_ resource.ResourceWithModifyPlan   = (*machineResource)(nil)
 )
 
-// machineStartTimeout bounds how long Create/Update wait for a machine to
-// reach "started". Generous because a fresh machine can be slow to boot when
-// several are created at once, and WaitForState re-polls within this budget
-// rather than giving up on the first long-poll's client timeout. On breach
-// Create destroys the machine and reports the wait error; Update leaves it
-// for the next plan.
+// machineStartTimeout bounds how long Create waits for a machine to reach
+// "started", and is the boot share of Update's wait (startWait). Generous
+// because a fresh machine can be slow to boot when several are created at
+// once, and WaitForState re-polls within this budget rather than giving up
+// on the first long-poll's client timeout. On breach Create destroys the
+// machine and reports the wait error; Update leaves it for the next plan.
 const machineStartTimeout = 120 * time.Second
+
+// startWait is how long Update waits for the new instance to reach
+// "started": the boot budget plus the machine's own stop grace, because a
+// running machine's update first stops the old instance, and Fly gives its
+// process the configured stop_config.timeout (Fly's default is seconds; the
+// Machines API caps it at 300s) before the kill that lets the new instance
+// boot. A wait shorter than that grace fails every update of a machine
+// whose process uses it, with the update already accepted: the next plan
+// then repeats it, and so on, which is how a fleet of agents that finish
+// their job before exiting could not be rolled at all. An unset or
+// unparseable timeout adds nothing, which is the pre-existing budget.
+func startWait(stop *stopConfigModel) time.Duration {
+	if stop == nil || stop.Timeout.IsNull() || stop.Timeout.IsUnknown() {
+		return machineStartTimeout
+	}
+	grace, err := time.ParseDuration(stop.Timeout.ValueString())
+	if err != nil || grace < 0 {
+		return machineStartTimeout
+	}
+	return machineStartTimeout + grace
+}
 
 // nameImmutableAfterCreate suppresses post-create config-side diffs on
 // the machine `name` attribute. Fly's Machines API silently no-ops the
@@ -1463,8 +1484,9 @@ func (r *machineResource) Update(ctx context.Context, req resource.UpdateRequest
 		}
 	}
 
-	// Wait for the new version to reach "started" state after update.
-	waitCtx, cancel := context.WithTimeout(ctx, machineStartTimeout)
+	// Wait for the new version to reach "started" state after update: the
+	// boot budget plus the old instance's stop grace (startWait).
+	waitCtx, cancel := context.WithTimeout(ctx, startWait(plan.StopConfig))
 	defer cancel()
 	if err := client.WaitForState(waitCtx, appName, machineID, "started", info.InstanceID); err != nil {
 		resp.Diagnostics.AddError("Wait For Started Error",
@@ -2216,6 +2238,46 @@ func setMachineState(model *machineResourceModel, info *flyio.MachineInfo) {
 	model.PrivateIP = types.StringValue(info.PrivateIP)
 	if info.ImageRef.Digest != "" {
 		model.ImageDigest = types.StringValue(info.ImageRef.Digest)
+	}
+	refreshImage(model, info)
+}
+
+// refreshImage reads the config's image back into state, so state names
+// what the machine holds rather than what the last apply meant to give it.
+// The two part when an update is accepted but its wait is not: tofu keeps
+// the prior state, and without this a refresh could never close the gap,
+// so every plan repeated the update and every apply the wait. The state's
+// own spelling is kept when it names the same image, since a registry
+// default written one way and read back another is not drift.
+func refreshImage(model *machineResourceModel, info *flyio.MachineInfo) {
+	if info.Image == "" || sameImage(model.Image.ValueString(), info.Image) {
+		return
+	}
+	model.Image = types.StringValue(info.Image)
+}
+
+// sameImage reports whether two image references name the same image once
+// Docker Hub's implied prefixes are made explicit: "nginx" is
+// "docker.io/library/nginx", and a reference Fly echoes in either form
+// names what the config wrote.
+func sameImage(a, b string) bool {
+	return canonicalImage(a) == canonicalImage(b)
+}
+
+func canonicalImage(ref string) string {
+	ref = strings.TrimPrefix(ref, "index.docker.io/")
+	ref = strings.TrimPrefix(ref, "docker.io/")
+	// A first path element with a dot or a colon is a registry host, as
+	// Docker's own reference parsing has it; anything else is a Docker Hub
+	// path, and a bare name is a library image there.
+	host, _, found := strings.Cut(ref, "/")
+	switch {
+	case !found:
+		return "docker.io/library/" + ref
+	case strings.ContainsAny(host, ".:") || host == "localhost":
+		return ref
+	default:
+		return "docker.io/" + ref
 	}
 }
 

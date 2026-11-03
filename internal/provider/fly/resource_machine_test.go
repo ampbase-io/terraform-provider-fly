@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -1402,4 +1403,90 @@ func validateMachineConfig(t *testing.T, configJSON string) []*tfprotov6.Diagnos
 		t.Fatalf("ValidateResourceConfig: %v", err)
 	}
 	return resp.Diagnostics
+}
+
+// TestRefreshImage is the gap a timed-out update leaves: the update was
+// accepted, tofu kept the prior state, and without the read-back no refresh
+// could ever record the image the machine holds, so every plan repeated the
+// update. The counterfactual is the deletion of the refreshImage call in
+// setMachineState, which fails the first case alone.
+func TestRefreshImage(t *testing.T) {
+	t.Parallel()
+
+	t.Run("an image the machine holds replaces the one state remembers", func(t *testing.T) {
+		t.Parallel()
+		model := &machineResourceModel{Image: types.StringValue("registry.fly.io/agents:old")}
+		setMachineState(model, &flyio.MachineInfo{Image: "registry.fly.io/agents:new"})
+		if got := model.Image.ValueString(); got != "registry.fly.io/agents:new" {
+			t.Fatalf("image not refreshed: got %q", got)
+		}
+	})
+
+	t.Run("the same image spelled with Docker Hub's defaults keeps state's spelling", func(t *testing.T) {
+		t.Parallel()
+		model := &machineResourceModel{Image: types.StringValue("flyio/fly-autoscaler:0.3.2")}
+		setMachineState(model, &flyio.MachineInfo{Image: "docker.io/flyio/fly-autoscaler:0.3.2"})
+		if got := model.Image.ValueString(); got != "flyio/fly-autoscaler:0.3.2" {
+			t.Fatalf("spelling changed on a same-image read-back: got %q", got)
+		}
+	})
+
+	t.Run("a response without a config leaves state alone", func(t *testing.T) {
+		t.Parallel()
+		model := &machineResourceModel{Image: types.StringValue("registry.fly.io/agents:old")}
+		setMachineState(model, &flyio.MachineInfo{})
+		if got := model.Image.ValueString(); got != "registry.fly.io/agents:old" {
+			t.Fatalf("image changed on an empty read-back: got %q", got)
+		}
+	})
+}
+
+func TestCanonicalImage(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"nginx":                                  "docker.io/library/nginx",
+		"library/nginx":                          "docker.io/library/nginx",
+		"docker.io/library/nginx":                "docker.io/library/nginx",
+		"index.docker.io/library/nginx":          "docker.io/library/nginx",
+		"flyio/fly-autoscaler:0.3.2":             "docker.io/flyio/fly-autoscaler:0.3.2",
+		"registry.fly.io/agents:ca639dc8945c":    "registry.fly.io/agents:ca639dc8945c",
+		"public.ecr.aws/buildkite/agent-metrics": "public.ecr.aws/buildkite/agent-metrics",
+		"localhost:5000/agents:dev":              "localhost:5000/agents:dev",
+	}
+	for in, want := range cases {
+		if got := canonicalImage(in); got != want {
+			t.Errorf("canonicalImage(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestStartWait: an update of a running machine stops the old instance
+// first, and Fly waits the configured stop grace before the kill, so the
+// wait for the new instance has to outlast that grace. Each case's
+// expected value is spelled from the constant and the grace rather than
+// as a number, so the test states the derivation it checks.
+func TestStartWait(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		stop *stopConfigModel
+		want time.Duration
+	}{
+		{"no stop config: the boot budget alone", nil, machineStartTimeout},
+		{"null timeout: the boot budget alone", &stopConfigModel{Timeout: types.StringNull()}, machineStartTimeout},
+		{"unknown timeout: the boot budget alone", &stopConfigModel{Timeout: types.StringUnknown()}, machineStartTimeout},
+		{"the Machines API's 300s cap", &stopConfigModel{Timeout: types.StringValue("300s")}, machineStartTimeout + 300*time.Second},
+		{"a short grace", &stopConfigModel{Timeout: types.StringValue("5s")}, machineStartTimeout + 5*time.Second},
+		{"an unparseable timeout: the boot budget alone", &stopConfigModel{Timeout: types.StringValue("five minutes")}, machineStartTimeout},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := startWait(tc.stop); got != tc.want {
+				t.Fatalf("startWait = %v, want %v", got, tc.want)
+			}
+		})
+	}
 }

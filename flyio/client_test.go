@@ -703,7 +703,7 @@ func TestGetMachine(t *testing.T) {
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"id":"mach-1","state":"stopped","host_status":"ok","region":"iad","image_ref":{"repository":"reg","tag":"v1","digest":"sha256:def"}}`))
+		_, _ = w.Write([]byte(`{"id":"mach-1","state":"stopped","host_status":"ok","region":"iad","config":{"image":"reg/agents:v1"},"image_ref":{"repository":"reg","tag":"v1","digest":"sha256:def"}}`))
 	}))
 	defer srv.Close()
 
@@ -717,6 +717,11 @@ func TestGetMachine(t *testing.T) {
 	}
 	if m.ImageRef.Digest != "sha256:def" {
 		t.Errorf("digest = %q", m.ImageRef.Digest)
+	}
+	// The config's image, distinct from image_ref: the one the provider's
+	// refresh reads back.
+	if m.Image != "reg/agents:v1" {
+		t.Errorf("config image = %q, want reg/agents:v1", m.Image)
 	}
 }
 
