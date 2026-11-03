@@ -65,7 +65,7 @@ resource "fly_machine" "web" {
 ### Required
 
 - `app` (String) Application name the machine belongs to.
-- `image` (String) Docker image to run. Ignored by Fly once any `container` block is declared, but still required; set it to the main container's image.
+- `image` (String) Docker image to run. Ignored by Fly once any `container` block is declared, but still required; set it to the main container's image. Read reads it back from the machine, so an image rolled outside this provider (a `fly deploy`) shows as drift on the next plan; `lifecycle { ignore_changes = [image] }` keeps such a machine's image out of the plan.
 
 ### Optional
 

@@ -1409,24 +1409,24 @@ func validateMachineConfig(t *testing.T, configJSON string) []*tfprotov6.Diagnos
 // accepted, tofu kept the prior state, and without the read-back no refresh
 // could ever record the image the machine holds, so every plan repeated the
 // update. The counterfactual is the deletion of the refreshImage call in
-// setMachineState, which fails the first case alone.
+// Read, which fails the first case alone.
 func TestRefreshImage(t *testing.T) {
 	t.Parallel()
 
 	t.Run("an image the machine holds replaces the one state remembers", func(t *testing.T) {
 		t.Parallel()
 		model := &machineResourceModel{Image: types.StringValue("registry.fly.io/agents:old")}
-		setMachineState(model, &flyio.MachineInfo{Image: "registry.fly.io/agents:new"})
+		refreshImage(model, &flyio.MachineInfo{Image: "registry.fly.io/agents:new"})
 		if got := model.Image.ValueString(); got != "registry.fly.io/agents:new" {
 			t.Fatalf("image not refreshed: got %q", got)
 		}
 	})
 
-	t.Run("the same image spelled with Docker Hub's defaults keeps state's spelling", func(t *testing.T) {
+	t.Run("the same image spelled with Docker's defaults keeps state's spelling", func(t *testing.T) {
 		t.Parallel()
-		model := &machineResourceModel{Image: types.StringValue("flyio/fly-autoscaler:0.3.2")}
-		setMachineState(model, &flyio.MachineInfo{Image: "docker.io/flyio/fly-autoscaler:0.3.2"})
-		if got := model.Image.ValueString(); got != "flyio/fly-autoscaler:0.3.2" {
+		model := &machineResourceModel{Image: types.StringValue("flyio/fly-autoscaler")}
+		refreshImage(model, &flyio.MachineInfo{Image: "docker.io/flyio/fly-autoscaler:latest"})
+		if got := model.Image.ValueString(); got != "flyio/fly-autoscaler" {
 			t.Fatalf("spelling changed on a same-image read-back: got %q", got)
 		}
 	})
@@ -1434,9 +1434,22 @@ func TestRefreshImage(t *testing.T) {
 	t.Run("a response without a config leaves state alone", func(t *testing.T) {
 		t.Parallel()
 		model := &machineResourceModel{Image: types.StringValue("registry.fly.io/agents:old")}
-		setMachineState(model, &flyio.MachineInfo{})
+		refreshImage(model, &flyio.MachineInfo{})
 		if got := model.Image.ValueString(); got != "registry.fly.io/agents:old" {
 			t.Fatalf("image changed on an empty read-back: got %q", got)
+		}
+	})
+
+	// After an apply the framework holds the provider to the configured
+	// value, so the read-back is Read's alone: setMachineState, which
+	// Create and Update call, must leave the image as planned whatever
+	// Fly echoes.
+	t.Run("setMachineState leaves the planned image alone", func(t *testing.T) {
+		t.Parallel()
+		model := &machineResourceModel{Image: types.StringValue("registry.fly.io/agents:planned")}
+		setMachineState(model, &flyio.MachineInfo{Image: "registry.fly.io/agents:planned@sha256:0123"})
+		if got := model.Image.ValueString(); got != "registry.fly.io/agents:planned" {
+			t.Fatalf("setMachineState rewrote the planned image: got %q", got)
 		}
 	})
 }
@@ -1445,14 +1458,17 @@ func TestCanonicalImage(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]string{
-		"nginx":                                  "docker.io/library/nginx",
-		"library/nginx":                          "docker.io/library/nginx",
-		"docker.io/library/nginx":                "docker.io/library/nginx",
-		"index.docker.io/library/nginx":          "docker.io/library/nginx",
+		"nginx":                                  "docker.io/library/nginx:latest",
+		"nginx:1.27":                             "docker.io/library/nginx:1.27",
+		"library/nginx":                          "docker.io/library/nginx:latest",
+		"docker.io/library/nginx":                "docker.io/library/nginx:latest",
+		"index.docker.io/library/nginx:latest":   "docker.io/library/nginx:latest",
 		"flyio/fly-autoscaler:0.3.2":             "docker.io/flyio/fly-autoscaler:0.3.2",
 		"registry.fly.io/agents:ca639dc8945c":    "registry.fly.io/agents:ca639dc8945c",
-		"public.ecr.aws/buildkite/agent-metrics": "public.ecr.aws/buildkite/agent-metrics",
+		"registry.fly.io/agents@sha256:0123":     "registry.fly.io/agents@sha256:0123",
+		"public.ecr.aws/buildkite/agent-metrics": "public.ecr.aws/buildkite/agent-metrics:latest",
 		"localhost:5000/agents:dev":              "localhost:5000/agents:dev",
+		"localhost:5000/agents":                  "localhost:5000/agents:latest",
 	}
 	for in, want := range cases {
 		if got := canonicalImage(in); got != want {
@@ -1462,29 +1478,33 @@ func TestCanonicalImage(t *testing.T) {
 }
 
 // TestStartWait: an update of a running machine stops the old instance
-// first, and Fly waits the configured stop grace before the kill, so the
-// wait for the new instance has to outlast that grace. Each case's
-// expected value is spelled from the constant and the grace rather than
-// as a number, so the test states the derivation it checks.
+// first, under the grace in force before the update, and Fly waits that
+// grace before the kill, so the wait for the new instance has to outlast
+// the larger of the prior and the planned grace. Each case's expected
+// value is spelled from the constant and the grace rather than as a
+// number, so the test states the derivation it checks.
 func TestStartWait(t *testing.T) {
 	t.Parallel()
 
+	grace := func(s string) *stopConfigModel { return &stopConfigModel{Timeout: types.StringValue(s)} }
 	cases := []struct {
-		name string
-		stop *stopConfigModel
-		want time.Duration
+		name           string
+		prior, planned *stopConfigModel
+		want           time.Duration
 	}{
-		{"no stop config: the boot budget alone", nil, machineStartTimeout},
-		{"null timeout: the boot budget alone", &stopConfigModel{Timeout: types.StringNull()}, machineStartTimeout},
-		{"unknown timeout: the boot budget alone", &stopConfigModel{Timeout: types.StringUnknown()}, machineStartTimeout},
-		{"the Machines API's 300s cap", &stopConfigModel{Timeout: types.StringValue("300s")}, machineStartTimeout + 300*time.Second},
-		{"a short grace", &stopConfigModel{Timeout: types.StringValue("5s")}, machineStartTimeout + 5*time.Second},
-		{"an unparseable timeout: the boot budget alone", &stopConfigModel{Timeout: types.StringValue("five minutes")}, machineStartTimeout},
+		{"no stop config either side: the boot budget alone", nil, nil, machineStartTimeout},
+		{"null timeout: the boot budget alone", nil, &stopConfigModel{Timeout: types.StringNull()}, machineStartTimeout},
+		{"unknown timeout: the boot budget alone", nil, &stopConfigModel{Timeout: types.StringUnknown()}, machineStartTimeout},
+		{"the Machines API's 300s cap, unchanged", grace("300s"), grace("300s"), machineStartTimeout + 300*time.Second},
+		{"a grace set for the first time waits for it", nil, grace("300s"), machineStartTimeout + 300*time.Second},
+		{"a grace lowered this apply still waits out the old one", grace("300s"), grace("5s"), machineStartTimeout + 300*time.Second},
+		{"a grace raised this apply waits for the new one", grace("5s"), grace("300s"), machineStartTimeout + 300*time.Second},
+		{"an unparseable timeout: the boot budget alone", nil, grace("five minutes"), machineStartTimeout},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := startWait(tc.stop); got != tc.want {
+			if got := startWait(tc.prior, tc.planned); got != tc.want {
 				t.Fatalf("startWait = %v, want %v", got, tc.want)
 			}
 		})

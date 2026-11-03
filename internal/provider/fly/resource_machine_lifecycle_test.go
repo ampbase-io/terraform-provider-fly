@@ -510,3 +510,42 @@ func TestMachineCreate_CleanupOnFailure(t *testing.T) {
 		})
 	}
 }
+
+// TestMachineRead_RefreshesImage is the seam between Read and the
+// read-back: the helper is unit-tested in TestRefreshImage, and this is
+// what fails when Read stops calling it, the counterfactual that a helper
+// test cannot see. The machine holds the image a timed-out update gave
+// it; state remembers the one before.
+func TestMachineRead_RefreshesImage(t *testing.T) {
+	t.Parallel()
+	s := machineSchema(t)
+
+	read := func(t *testing.T, held, remembered string) string {
+		t.Helper()
+		f := newMachinesFake(t)
+		f.seed("m-img", "started").image = held
+		resp := &resource.ReadResponse{State: tfsdk.State{Schema: s}}
+		f.resource(t).Read(context.Background(), resource.ReadRequest{
+			State: mkState(t, s, machineResourceModel{
+				ID:    types.StringValue("m-img"),
+				App:   types.StringValue("app"),
+				Image: types.StringValue(remembered),
+			}),
+		}, resp)
+		if resp.Diagnostics.HasError() {
+			t.Fatalf("Read: %v", resp.Diagnostics)
+		}
+		var out machineResourceModel
+		if diags := resp.State.Get(context.Background(), &out); diags.HasError() {
+			t.Fatalf("read state back: %v", diags)
+		}
+		return out.Image.ValueString()
+	}
+
+	if got := read(t, "img:v2", "img:v1"); got != "img:v2" {
+		t.Fatalf("state image after Read = %q, want the machine's img:v2", got)
+	}
+	if got := read(t, "docker.io/library/img:v1", "img:v1"); got != "img:v1" {
+		t.Fatalf("state image after a same-image Read = %q, want state's own img:v1", got)
+	}
+}

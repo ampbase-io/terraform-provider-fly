@@ -72,6 +72,9 @@ type fakeMachine struct {
 	// mounts are the volume IDs the API reports mounted, which a machine
 	// imported into state does not carry.
 	mounts []string
+	// image is the config's image the API reports, which Read reads back;
+	// empty leaves the config without one, as a seeded machine has.
+	image string
 
 	// postUpdateState is the state the machine rests in after an
 	// UpdateMachine, as reported by MachinesShow and MachinesWait. When it
@@ -438,10 +441,13 @@ func (f *machinesFake) handleVolume(w http.ResponseWriter, id string) {
 
 func (m *fakeMachine) wire() machines.Machine {
 	var config *machines.FlyMachineConfig
-	if len(m.mounts) > 0 {
+	if len(m.mounts) > 0 || m.image != "" {
 		config = &machines.FlyMachineConfig{}
 		for _, v := range m.mounts {
 			config.Mounts = append(config.Mounts, machines.FlyMachineMount{Volume: sp(v), Path: sp("/data")})
+		}
+		if m.image != "" {
+			config.Image = sp(m.image)
 		}
 	}
 	return machines.Machine{
