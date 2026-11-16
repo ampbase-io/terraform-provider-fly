@@ -312,7 +312,7 @@ func TestUpdateMachineRetriesOnManifestUnknown(t *testing.T) {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(machines.Machine{Id: new("mach-after-manifest-settle"), InstanceId: new("inst")})
+		_ = json.NewEncoder(w).Encode(machines.Machine{Id: new("mach-after-manifest-settle"), Version: new("inst")})
 	}))
 	defer srv.Close()
 
@@ -2335,5 +2335,40 @@ func TestDeleteAppReportingRefusalsMeasuresTheWait(t *testing.T) {
 		case refusals > 0 && waited <= 0:
 			t.Errorf("%d refusals: waited %s, want the time past the first", refusals, waited)
 		}
+	}
+}
+
+// TestMachineVersionID pins where the machine version ID fly_machine keeps
+// as instance_id comes from: `version` when Fly sends it, the deprecated
+// `instance_id` alias otherwise. Both decode paths must agree, or state
+// would hold different IDs depending on which call last wrote it.
+func TestMachineVersionID(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, body, want string
+	}{
+		{"both", `{"id":"m","version":"v-1","instance_id":"v-1"}`, "v-1"},
+		{"version only", `{"id":"m","version":"v-2"}`, "v-2"},
+		{"instance_id only", `{"id":"m","instance_id":"v-3"}`, "v-3"},
+		{"empty version", `{"id":"m","version":"","instance_id":"v-4"}`, "v-4"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var created Machine
+			if err := json.Unmarshal([]byte(tt.body), &created); err != nil {
+				t.Fatalf("decode create response: %v", err)
+			}
+			if created.ID != "m" || created.InstanceID != tt.want {
+				t.Errorf("create: got {%q %q}, want {m %q}", created.ID, created.InstanceID, tt.want)
+			}
+			var gen machines.Machine
+			if err := json.Unmarshal([]byte(tt.body), &gen); err != nil {
+				t.Fatalf("decode machine: %v", err)
+			}
+			if got := machineInfoFrom(gen).InstanceID; got != tt.want {
+				t.Errorf("machineInfoFrom: got %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
