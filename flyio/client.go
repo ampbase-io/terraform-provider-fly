@@ -992,7 +992,7 @@ func (c *Client) GetApp(ctx context.Context, appName string) (*AppInfo, error) {
 type AppInfo struct {
 	ID      string
 	Name    string
-	Status  string
+	Status  machines.AppStatus
 	OrgSlug string
 	Network string // per-app private network ("" for the org's default)
 	// InternalNumericID is Fly's own numeric app id, the identifier an
@@ -1208,7 +1208,7 @@ type CreateVolumeInput struct {
 	Region            string
 	SizeGB            int
 	Encrypted         *bool
-	Fstype            string
+	Fstype            machines.CreateVolumeRequestFstype
 	AutoBackupEnabled *bool
 	SnapshotRetention *int
 	RequireUniqueZone *bool

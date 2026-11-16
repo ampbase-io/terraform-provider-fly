@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -13,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/ampbase-io/terraform-provider-fly/flyio"
@@ -128,9 +130,12 @@ func (r *volumeResource) Schema(_ context.Context, _ resource.SchemaRequest, res
 				},
 			},
 			"fstype": schema.StringAttribute{
-				Description: "Filesystem type. Defaults to ext4. Cannot be changed after creation.",
+				Description: "Filesystem type: `ext4` or `raw`. Defaults to ext4. Cannot be changed after creation.",
 				Optional:    true,
 				Computed:    true,
+				Validators: []validator.String{
+					stringvalidator.OneOf(string(machines.Ext4), string(machines.Raw)),
+				},
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 					stringplanmodifier.UseStateForUnknown(),
@@ -326,7 +331,7 @@ func (r *volumeResource) Create(ctx context.Context, req resource.CreateRequest,
 		input.Encrypted = &v
 	}
 	if !plan.Fstype.IsNull() && !plan.Fstype.IsUnknown() {
-		input.Fstype = plan.Fstype.ValueString()
+		input.Fstype = machines.CreateVolumeRequestFstype(plan.Fstype.ValueString())
 	}
 	if !plan.AutoBackupEnabled.IsNull() && !plan.AutoBackupEnabled.IsUnknown() {
 		v := plan.AutoBackupEnabled.ValueBool()
