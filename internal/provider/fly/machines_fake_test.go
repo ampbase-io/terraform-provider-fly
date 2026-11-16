@@ -307,7 +307,7 @@ func (f *machinesFake) createMachine(w http.ResponseWriter, r *http.Request) {
 	}
 	f.machines[id] = m
 	// Create response is decoded into flyio.Machine{ID, InstanceID}.
-	writeJSON(w, http.StatusOK, map[string]string{"id": m.id, "instance_id": m.instanceID})
+	writeJSON(w, http.StatusOK, map[string]string{"id": m.id, "version": m.instanceID})
 }
 
 func (f *machinesFake) listMachines(w http.ResponseWriter) {
@@ -451,13 +451,13 @@ func (m *fakeMachine) wire() machines.Machine {
 		}
 	}
 	return machines.Machine{
-		Config:     config,
-		Id:         sp(m.id),
-		Name:       sp(m.name),
-		InstanceId: sp(m.instanceID),
-		State:      sp(m.state),
-		Region:     sp(m.region),
-		PrivateIp:  sp(m.privateIP),
+		Config:    config,
+		Id:        sp(m.id),
+		Name:      sp(m.name),
+		Version:   sp(m.instanceID),
+		State:     sp(m.state),
+		Region:    sp(m.region),
+		PrivateIp: sp(m.privateIP),
 		// Config carries no checks, so WaitForChecks returns immediately.
 		// Concurrency assertions read the request body, not this.
 	}

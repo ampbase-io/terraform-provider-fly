@@ -3,6 +3,7 @@ package flyio
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -44,13 +45,35 @@ type (
 const RestartPolicyNo = machines.FlyMachineRestartPolicyNo
 
 // Machine is the response from creating a machine.
+//
+// InstanceID holds the machine's version ID. Fly now sends it as `version`
+// and keeps `instance_id` as a deprecated alias carrying the same value;
+// UnmarshalJSON prefers the former and falls back to the latter, so the ID
+// fly_machine stores in state is unchanged whichever field a response has.
 type Machine struct {
 	ID         string `json:"id"`
-	InstanceID string `json:"instance_id"`
+	InstanceID string `json:"-"`
 	// ImageRef is what Fly resolved the config's image to. A caller that
 	// names a mutable tag gets the digest behind it here, and only here:
 	// the tag it asked for identifies no particular build.
 	ImageRef MachineImageRef `json:"image_ref"`
+}
+
+// UnmarshalJSON decodes a create response, taking InstanceID from
+// `version` when present and from the deprecated `instance_id` otherwise.
+func (m *Machine) UnmarshalJSON(data []byte) error {
+	type plain Machine
+	var raw struct {
+		plain
+		Version    string `json:"version"`
+		InstanceID string `json:"instance_id"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*m = Machine(raw.plain)
+	m.InstanceID = cmp.Or(raw.Version, raw.InstanceID)
+	return nil
 }
 
 // Client is a thin wrapper over the generated Machines API client.
@@ -596,8 +619,14 @@ func machineInfoFrom(m machines.Machine) MachineInfo {
 	if m.Name != nil {
 		info.Name = *m.Name
 	}
-	if m.InstanceId != nil {
-		info.InstanceID = *m.InstanceId
+	// version and the deprecated instance_id carry the same value; prefer
+	// the former, falling back so a response with only the alias still
+	// yields the ID fly_machine keeps in state.
+	switch {
+	case m.Version != nil && *m.Version != "":
+		info.InstanceID = *m.Version
+	case m.InstanceId != nil: //nolint:staticcheck // fallback for responses without version
+		info.InstanceID = *m.InstanceId //nolint:staticcheck // see above
 	}
 	if m.State != nil {
 		info.State = *m.State
@@ -992,7 +1021,7 @@ func (c *Client) GetApp(ctx context.Context, appName string) (*AppInfo, error) {
 type AppInfo struct {
 	ID      string
 	Name    string
-	Status  string
+	Status  machines.AppStatus
 	OrgSlug string
 	Network string // per-app private network ("" for the org's default)
 	// InternalNumericID is Fly's own numeric app id, the identifier an
@@ -1208,7 +1237,7 @@ type CreateVolumeInput struct {
 	Region            string
 	SizeGB            int
 	Encrypted         *bool
-	Fstype            string
+	Fstype            machines.CreateVolumeRequestFstype
 	AutoBackupEnabled *bool
 	SnapshotRetention *int
 	RequireUniqueZone *bool

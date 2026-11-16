@@ -16,6 +16,27 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for AppStatus.
+const (
+	AppStatusDeployed  AppStatus = "deployed"
+	AppStatusPending   AppStatus = "pending"
+	AppStatusSuspended AppStatus = "suspended"
+)
+
+// Valid indicates whether the value is a known member of the AppStatus enum.
+func (e AppStatus) Valid() bool {
+	switch e {
+	case AppStatusDeployed:
+		return true
+	case AppStatusPending:
+		return true
+	case AppStatusSuspended:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CertificateEntrySource.
 const (
 	Custom CertificateEntrySource = "custom"
@@ -49,6 +70,45 @@ func (e CertificateEntryStatus) Valid() bool {
 	case PendingOwnership:
 		return true
 	case PendingValidation:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CheckStatusStatus.
+const (
+	Critical CheckStatusStatus = "critical"
+	Passing  CheckStatusStatus = "passing"
+	Warning  CheckStatusStatus = "warning"
+)
+
+// Valid indicates whether the value is a known member of the CheckStatusStatus enum.
+func (e CheckStatusStatus) Valid() bool {
+	switch e {
+	case Critical:
+		return true
+	case Passing:
+		return true
+	case Warning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateVolumeRequestFstype.
+const (
+	Ext4 CreateVolumeRequestFstype = "ext4"
+	Raw  CreateVolumeRequestFstype = "raw"
+)
+
+// Valid indicates whether the value is a known member of the CreateVolumeRequestFstype enum.
+func (e CreateVolumeRequestFstype) Valid() bool {
+	switch e {
+	case Ext4:
+		return true
+	case Raw:
 		return true
 	default:
 		return false
@@ -457,6 +517,8 @@ func (e FlyUnhealthyPolicy) Valid() bool {
 // Defines values for MainStatusCode.
 const (
 	MainStatusCodeCapacityErr                MainStatusCode = "insufficient_capacity"
+	MainStatusCodeExecOutputTooLargeErr      MainStatusCode = "exec_output_too_large"
+	MainStatusCodeExecRequestTooLargeErr     MainStatusCode = "exec_request_too_large"
 	MainStatusCodeNameTakenErr               MainStatusCode = "name_taken"
 	MainStatusCodeUnknown                    MainStatusCode = "unknown"
 	MainStatusCodeVolumePlacementCapacityErr MainStatusCode = "volume_placement_capacity"
@@ -466,6 +528,10 @@ const (
 func (e MainStatusCode) Valid() bool {
 	switch e {
 	case MainStatusCodeCapacityErr:
+		return true
+	case MainStatusCodeExecOutputTooLargeErr:
+		return true
+	case MainStatusCodeExecRequestTooLargeErr:
 		return true
 	case MainStatusCodeNameTakenErr:
 		return true
@@ -480,6 +546,7 @@ func (e MainStatusCode) Valid() bool {
 
 // Defines values for MachinesWaitParamsState.
 const (
+	MachinesWaitParamsStateArchived  MachinesWaitParamsState = "archived"
 	MachinesWaitParamsStateDestroyed MachinesWaitParamsState = "destroyed"
 	MachinesWaitParamsStateFailed    MachinesWaitParamsState = "failed"
 	MachinesWaitParamsStateSettled   MachinesWaitParamsState = "settled"
@@ -491,6 +558,8 @@ const (
 // Valid indicates whether the value is a known member of the MachinesWaitParamsState enum.
 func (e MachinesWaitParamsState) Valid() bool {
 	switch e {
+	case MachinesWaitParamsStateArchived:
+		return true
 	case MachinesWaitParamsStateDestroyed:
 		return true
 	case MachinesWaitParamsStateFailed:
@@ -510,159 +579,328 @@ func (e MachinesWaitParamsState) Valid() bool {
 
 // AcmeChallenge defines model for AcmeChallenge.
 type AcmeChallenge struct {
-	Name   *string `json:"name,omitempty"`
+	// Name Name of the CNAME record to create, such as `_acme-challenge.example.com`.
+	Name *string `json:"name,omitempty"`
+
+	// Target Value the CNAME record must point to.
 	Target *string `json:"target,omitempty"`
 }
 
 // App defines model for App.
 type App struct {
-	Id                *string              `json:"id,omitempty"`
-	InternalNumericId *int                 `json:"internal_numeric_id,omitempty"`
-	MachineCount      *int                 `json:"machine_count,omitempty"`
-	Name              *string              `json:"name,omitempty"`
-	Network           *string              `json:"network,omitempty"`
-	NetworkCidr       *string              `json:"network_cidr,omitempty"`
-	Organization      *AppOrganizationInfo `json:"organization,omitempty"`
-	Status            *string              `json:"status,omitempty"`
-	VolumeCount       *int                 `json:"volume_count,omitempty"`
+	// Id Unique ID of the app, as used by Fly.io's GraphQL API.
+	Id *string `json:"id,omitempty"`
+
+	// InternalNumericId Fly.io's internal numeric ID of the app.
+	InternalNumericId *int `json:"internal_numeric_id,omitempty"`
+
+	// MachineCount Number of the app's Machines that have not been destroyed.
+	MachineCount *int `json:"machine_count,omitempty"`
+
+	// Name Globally unique name of the app.
+	Name *string `json:"name,omitempty"`
+
+	// Network Name of the private network the app is attached to: `default` for the organization's
+	// default network, or the name given when the app was created.
+	Network *string `json:"network,omitempty"`
+
+	// NetworkCidr The /48 IPv6 prefix of the private (6PN) network the app is attached to, such as
+	// `fdaa:0:1234::/48`. Apps on the same network share it.
+	NetworkCidr *string `json:"network_cidr,omitempty"`
+
+	// Organization The organization that owns the app.
+	Organization *AppOrganizationInfo `json:"organization,omitempty"`
+
+	// Status State of the app. `pending` until one of its Machines changes state. After that, updated
+	// asynchronously whenever a Machine changes state: `deployed` if at least one Machine is
+	// started, and `suspended` otherwise.
+	Status *AppStatus `json:"status,omitempty"`
+
+	// VolumeCount Number of the app's volumes that have not been destroyed or scheduled for destruction.
+	VolumeCount *int `json:"volume_count,omitempty"`
 }
+
+// AppStatus State of the app. `pending` until one of its Machines changes state. After that, updated
+// asynchronously whenever a Machine changes state: `deployed` if at least one Machine is
+// started, and `suspended` otherwise.
+type AppStatus string
 
 // AppOrganizationInfo defines model for AppOrganizationInfo.
 type AppOrganizationInfo struct {
-	InternalNumericId *int    `json:"internal_numeric_id,omitempty"`
-	Name              *string `json:"name,omitempty"`
-	Slug              *string `json:"slug,omitempty"`
+	// InternalNumericId Fly.io's internal numeric ID of the organization.
+	InternalNumericId *int `json:"internal_numeric_id,omitempty"`
+
+	// Name Display name of the organization.
+	Name *string `json:"name,omitempty"`
+
+	// Slug Slug of the organization, used to refer to it in API requests such as `org_slug`.
+	Slug *string `json:"slug,omitempty"`
 }
 
 // AppSecret defines model for AppSecret.
 type AppSecret struct {
+	// CreatedAt When the secret was first set. Only returned when reading secrets.
 	CreatedAt *string `json:"created_at,omitempty"`
-	Digest    *string `json:"digest,omitempty"`
-	Name      *string `json:"name,omitempty"`
+
+	// Digest Short fingerprint of the value, to tell whether it changed without revealing it. Omitted
+	// for deleted secrets.
+	Digest *string `json:"digest,omitempty"`
+
+	// Name Name of the secret.
+	Name *string `json:"name,omitempty"`
+
+	// UpdatedAt When the secret's value last changed. Only returned when reading secrets.
 	UpdatedAt *string `json:"updated_at,omitempty"`
-	Value     *string `json:"value,omitempty"`
+
+	// Value Value of the secret. Only returned with `show_secrets=true`, and when setting secrets.
+	Value *string `json:"value,omitempty"`
 }
 
 // AppSecrets defines model for AppSecrets.
 type AppSecrets struct {
+	// Secrets The app's secrets.
 	Secrets []AppSecret `json:"secrets,omitempty"`
 }
 
 // AppSecretsUpdateRequest defines model for AppSecretsUpdateRequest.
 type AppSecretsUpdateRequest struct {
+	// Values Secrets to change, keyed by name. A string value sets the secret; null deletes it. Names
+	// may only contain letters, digits, and underscores. Secrets not listed are left alone.
 	Values map[string]string `json:"values,omitempty"`
 }
 
 // AppSecretsUpdateResp defines model for AppSecretsUpdateResp.
 type AppSecretsUpdateResp struct {
+	// Secrets The secrets from the request, with their new values and digests; deleted secrets only
+	// have a name.
 	Secrets []AppSecret `json:"secrets,omitempty"`
-	Version *int        `json:"version,omitempty"`
+
+	// Version The app's secrets version after this change. Pass it as `min_secrets_version` when creating or
+	// updating Machines so that they are guaranteed to see the change.
+	Version *int `json:"version,omitempty"`
 }
 
 // AssignIPResponse defines model for AssignIPResponse.
 type AssignIPResponse struct {
+	// CreatedAt When the address was assigned to the app, in RFC 3339 format.
 	CreatedAt *string `json:"created_at,omitempty"`
-	Egress    *bool   `json:"egress,omitempty"`
-	Ip        *string `json:"ip,omitempty"`
 
-	// IpPair ip_pair is returned when "egress-pair" IP type is requested; in this case, ip is null.
+	// Egress Whether this is an egress address.
+	Egress *bool `json:"egress,omitempty"`
+
+	// Ip The allocated IP address. Null for `egress_pair`; see `ip_pair`.
+	Ip *string `json:"ip,omitempty"`
+
+	// IpPair The allocated IPv4 and IPv6 addresses when the `egress_pair` type was requested; null
+	// otherwise.
 	IpPair *IPPair `json:"ip_pair,omitempty"`
 
 	// Network The 6PN network a Flycast (private_v6) address belongs to. Null for all other IP types.
-	Network     *IPAssignmentNetwork `json:"network,omitempty"`
-	Region      *string              `json:"region,omitempty"`
-	ServiceName *string              `json:"service_name,omitempty"`
-	Shared      *bool                `json:"shared,omitempty"`
+	Network *IPAssignmentNetwork `json:"network,omitempty"`
+
+	// Region Region the address is scoped to, or `global` for addresses announced in all regions.
+	Region *string `json:"region,omitempty"`
+
+	// ServiceName Name of the service the address is scoped to, if any.
+	ServiceName *string `json:"service_name,omitempty"`
+
+	// Shared Whether this is the app's shared IPv4 address.
+	Shared *bool `json:"shared,omitempty"`
 }
 
 // CertificateCheckResponse defines model for CertificateCheckResponse.
 type CertificateCheckResponse struct {
-	AcmeRequested    *bool                        `json:"acme_requested,omitempty"`
-	Certificates     []CertificateEntry           `json:"certificates,omitempty"`
-	Configured       *bool                        `json:"configured,omitempty"`
-	DnsProvider      *string                      `json:"dns_provider,omitempty"`
-	DnsRecords       *DNSRecords                  `json:"dns_records,omitempty"`
-	DnsRequirements  *DNSRequirements             `json:"dns_requirements,omitempty"`
-	Hostname         *string                      `json:"hostname,omitempty"`
-	RateLimitedUntil *string                      `json:"rate_limited_until,omitempty"`
-	Status           *string                      `json:"status,omitempty"`
-	Validation       *CertificateValidation       `json:"validation,omitempty"`
+	// AcmeRequested Whether Fly.io-issued (ACME) certificates were requested for the hostname.
+	AcmeRequested *bool `json:"acme_requested,omitempty"`
+
+	// Certificates The hostname's certificates: at most one custom entry and one Fly.io entry.
+	Certificates []CertificateEntry `json:"certificates,omitempty"`
+
+	// Configured Whether ownership of the hostname has been verified.
+	Configured *bool `json:"configured,omitempty"`
+
+	// DnsProvider DNS provider detected for the hostname, if known.
+	DnsProvider *string     `json:"dns_provider,omitempty"`
+	DnsRecords  *DNSRecords `json:"dns_records,omitempty"`
+
+	// DnsRequirements DNS records to create to point the hostname at the app and validate it.
+	DnsRequirements *DNSRequirements `json:"dns_requirements,omitempty"`
+
+	// Hostname The hostname the certificate is for. May start with `*.` for a wildcard certificate.
+	Hostname *string `json:"hostname,omitempty"`
+
+	// RateLimitedUntil If Let's Encrypt is rate-limiting certificate requests for the hostname, when that ends.
+	RateLimitedUntil *string `json:"rate_limited_until,omitempty"`
+
+	// Status Human-readable status: `Ready`, `Awaiting certificates`, `Awaiting configuration`, or a
+	// hint about what is misconfigured.
+	Status *string `json:"status,omitempty"`
+
+	// Validation Which validation methods are currently possible.
+	Validation *CertificateValidation `json:"validation,omitempty"`
+
+	// ValidationErrors Problems found by the most recent validation.
 	ValidationErrors []CertificateValidationError `json:"validation_errors,omitempty"`
 }
 
 // CertificateDetail defines model for CertificateDetail.
 type CertificateDetail struct {
-	AcmeRequested    *bool                        `json:"acme_requested,omitempty"`
-	Certificates     []CertificateEntry           `json:"certificates,omitempty"`
-	Configured       *bool                        `json:"configured,omitempty"`
-	DnsProvider      *string                      `json:"dns_provider,omitempty"`
-	DnsRequirements  *DNSRequirements             `json:"dns_requirements,omitempty"`
-	Hostname         *string                      `json:"hostname,omitempty"`
-	RateLimitedUntil *string                      `json:"rate_limited_until,omitempty"`
-	Status           *string                      `json:"status,omitempty"`
-	Validation       *CertificateValidation       `json:"validation,omitempty"`
+	// AcmeRequested Whether Fly.io-issued (ACME) certificates were requested for the hostname.
+	AcmeRequested *bool `json:"acme_requested,omitempty"`
+
+	// Certificates The hostname's certificates: at most one custom entry and one Fly.io entry.
+	Certificates []CertificateEntry `json:"certificates,omitempty"`
+
+	// Configured Whether ownership of the hostname has been verified.
+	Configured *bool `json:"configured,omitempty"`
+
+	// DnsProvider DNS provider detected for the hostname, if known.
+	DnsProvider *string `json:"dns_provider,omitempty"`
+
+	// DnsRequirements DNS records to create to point the hostname at the app and validate it.
+	DnsRequirements *DNSRequirements `json:"dns_requirements,omitempty"`
+
+	// Hostname The hostname the certificate is for. May start with `*.` for a wildcard certificate.
+	Hostname *string `json:"hostname,omitempty"`
+
+	// RateLimitedUntil If Let's Encrypt is rate-limiting certificate requests for the hostname, when that ends.
+	RateLimitedUntil *string `json:"rate_limited_until,omitempty"`
+
+	// Status Human-readable status: `Ready`, `Awaiting certificates`, `Awaiting configuration`, or a
+	// hint about what is misconfigured.
+	Status *string `json:"status,omitempty"`
+
+	// Validation Which validation methods are currently possible.
+	Validation *CertificateValidation `json:"validation,omitempty"`
+
+	// ValidationErrors Problems found by the most recent validation.
 	ValidationErrors []CertificateValidationError `json:"validation_errors,omitempty"`
 }
 
 // CertificateEntry defines model for CertificateEntry.
 type CertificateEntry struct {
-	CreatedAt *string                 `json:"created_at,omitempty"`
-	ExpiresAt *string                 `json:"expires_at,omitempty"`
-	Issued    []IssuedCertificate     `json:"issued,omitempty"`
-	Issuer    *string                 `json:"issuer,omitempty"`
-	Source    *CertificateEntrySource `json:"source,omitempty"`
-	Status    *CertificateEntryStatus `json:"status,omitempty"`
+	// CreatedAt When the certificate was added; for Fly.io-issued certificates, the earliest one.
+	CreatedAt *string `json:"created_at,omitempty"`
+
+	// ExpiresAt When the certificate expires; for Fly.io-issued certificates, the latest one.
+	ExpiresAt *string `json:"expires_at,omitempty"`
+
+	// Issued The individual Fly.io-issued certificates, newest first. Empty for custom certificates.
+	Issued []IssuedCertificate `json:"issued,omitempty"`
+
+	// Issuer Issuer of a custom certificate. Omitted for Fly.io-issued certificates.
+	Issuer *string `json:"issuer,omitempty"`
+
+	// Source `custom` for an uploaded certificate, `fly` for certificates issued by Fly.io.
+	Source *CertificateEntrySource `json:"source,omitempty"`
+
+	// Status `active` once ownership of the hostname is verified. Until then, `pending_ownership` for
+	// custom certificates and `pending_validation` for Fly.io-issued certificates.
+	Status *CertificateEntryStatus `json:"status,omitempty"`
 }
 
-// CertificateEntrySource defines model for CertificateEntry.Source.
+// CertificateEntrySource `custom` for an uploaded certificate, `fly` for certificates issued by Fly.io.
 type CertificateEntrySource string
 
-// CertificateEntryStatus defines model for CertificateEntry.Status.
+// CertificateEntryStatus `active` once ownership of the hostname is verified. Until then, `pending_ownership` for
+// custom certificates and `pending_validation` for Fly.io-issued certificates.
 type CertificateEntryStatus string
 
 // CertificateSummary defines model for CertificateSummary.
 type CertificateSummary struct {
-	AcmeAlpnConfigured     *bool   `json:"acme_alpn_configured,omitempty"`
-	AcmeDnsConfigured      *bool   `json:"acme_dns_configured,omitempty"`
-	AcmeHttpConfigured     *bool   `json:"acme_http_configured,omitempty"`
-	AcmeRequested          *bool   `json:"acme_requested,omitempty"`
-	Configured             *bool   `json:"configured,omitempty"`
-	CreatedAt              *string `json:"created_at,omitempty"`
-	DnsProvider            *string `json:"dns_provider,omitempty"`
-	HasCustomCertificate   *bool   `json:"has_custom_certificate,omitempty"`
-	HasFlyCertificate      *bool   `json:"has_fly_certificate,omitempty"`
-	Hostname               *string `json:"hostname,omitempty"`
-	OwnershipTxtConfigured *bool   `json:"ownership_txt_configured,omitempty"`
-	Status                 *string `json:"status,omitempty"`
-	UpdatedAt              *string `json:"updated_at,omitempty"`
+	// AcmeAlpnConfigured Whether the hostname points at the app, allowing TLS-ALPN-01 validation.
+	AcmeAlpnConfigured *bool `json:"acme_alpn_configured,omitempty"`
+
+	// AcmeDnsConfigured Whether the `_acme-challenge` CNAME record is set up, allowing DNS-01 validation.
+	AcmeDnsConfigured *bool `json:"acme_dns_configured,omitempty"`
+
+	// AcmeHttpConfigured Whether the hostname points at the app, allowing HTTP-01 validation.
+	AcmeHttpConfigured *bool `json:"acme_http_configured,omitempty"`
+
+	// AcmeRequested Whether Fly.io-issued (ACME) certificates were requested for the hostname.
+	AcmeRequested *bool `json:"acme_requested,omitempty"`
+
+	// Configured Whether ownership of the hostname has been verified by any of the methods above.
+	Configured *bool `json:"configured,omitempty"`
+
+	// CreatedAt When the hostname was added to the app.
+	CreatedAt *string `json:"created_at,omitempty"`
+
+	// DnsProvider DNS provider detected for the hostname, if known.
+	DnsProvider *string `json:"dns_provider,omitempty"`
+
+	// HasCustomCertificate Whether a custom certificate was uploaded for the hostname.
+	HasCustomCertificate *bool `json:"has_custom_certificate,omitempty"`
+
+	// HasFlyCertificate Whether Fly.io has issued certificates for the hostname.
+	HasFlyCertificate *bool `json:"has_fly_certificate,omitempty"`
+
+	// Hostname The hostname the certificate is for. May start with `*.` for a wildcard certificate.
+	Hostname *string `json:"hostname,omitempty"`
+
+	// OwnershipTxtConfigured Whether the `_fly-ownership` TXT record is set up.
+	OwnershipTxtConfigured *bool `json:"ownership_txt_configured,omitempty"`
+
+	// Status Human-readable status: `Ready`, `Awaiting certificates`, `Awaiting configuration`, or a
+	// hint about what is misconfigured.
+	Status *string `json:"status,omitempty"`
+
+	// UpdatedAt When the hostname's certificate configuration last changed.
+	UpdatedAt *string `json:"updated_at,omitempty"`
 }
 
 // CertificateValidation defines model for CertificateValidation.
 type CertificateValidation struct {
-	AlpnConfigured         *bool `json:"alpn_configured,omitempty"`
-	DnsConfigured          *bool `json:"dns_configured,omitempty"`
-	HttpConfigured         *bool `json:"http_configured,omitempty"`
+	// AlpnConfigured Whether the hostname points at the app, allowing TLS-ALPN-01 validation.
+	AlpnConfigured *bool `json:"alpn_configured,omitempty"`
+
+	// DnsConfigured Whether the `_acme-challenge` CNAME record is set up, allowing DNS-01 validation.
+	DnsConfigured *bool `json:"dns_configured,omitempty"`
+
+	// HttpConfigured Whether the hostname points at the app, allowing HTTP-01 validation.
+	HttpConfigured *bool `json:"http_configured,omitempty"`
+
+	// OwnershipTxtConfigured Whether the `_fly-ownership` TXT record is set up.
 	OwnershipTxtConfigured *bool `json:"ownership_txt_configured,omitempty"`
 }
 
 // CertificateValidationError defines model for CertificateValidationError.
 type CertificateValidationError struct {
-	Code        *string `json:"code,omitempty"`
-	Message     *string `json:"message,omitempty"`
+	// Code Machine-readable error code.
+	Code *string `json:"code,omitempty"`
+
+	// Message Human-readable description of the problem.
+	Message *string `json:"message,omitempty"`
+
+	// Remediation How to fix the problem, if known.
 	Remediation *string `json:"remediation,omitempty"`
-	Timestamp   *string `json:"timestamp,omitempty"`
+
+	// Timestamp When the problem was detected.
+	Timestamp *string `json:"timestamp,omitempty"`
 }
 
 // CheckStatus defines model for CheckStatus.
 type CheckStatus struct {
-	Name      *string `json:"name,omitempty"`
-	Output    *string `json:"output,omitempty"`
-	Status    *string `json:"status,omitempty"`
+	// Name Name of the check: the key of a top-level check in `config.checks`, or
+	// `servicecheck-<index>-<type>-<internal_port>` for a check defined in a service.
+	Name *string `json:"name,omitempty"`
+
+	// Output Output of the most recent check run, such as an error message.
+	Output *string `json:"output,omitempty"`
+
+	// Status Result of the check: `passing`, `warning`, or `critical`.
+	Status *CheckStatusStatus `json:"status,omitempty"`
+
+	// UpdatedAt When the check's status was last updated.
 	UpdatedAt *string `json:"updated_at,omitempty"`
 }
 
+// CheckStatusStatus Result of the check: `passing`, `warning`, or `critical`.
+type CheckStatusStatus string
+
 // CreateAppRequest defines model for CreateAppRequest.
 type CreateAppRequest struct {
+	// EnableSubdomains Request a wildcard TLS certificate for *.svc.<app-name>.fly.dev. Defaults to false. Certificate provisioning is asynchronous; this does not create services or configure their routing.
 	EnableSubdomains *bool `json:"enable_subdomains,omitempty"`
 
 	// IdempotencyKey When set, makes a retry of this exact request safe: a
@@ -672,296 +910,667 @@ type CreateAppRequest struct {
 	// but a *different* name is rejected outright; it won't silently
 	// hand back the first app.
 	IdempotencyKey *string `json:"idempotency_key,omitempty"`
-	Name           *string `json:"name,omitempty"`
-	Network        *string `json:"network,omitempty"`
-	OrgSlug        *string `json:"org_slug,omitempty"`
+
+	// Name Globally unique name for the app. Required.
+	Name *string `json:"name,omitempty"`
+
+	// Network Name of the organization's private network to attach the app to. Creates the network if it does not exist. Omit, use an empty string, or use "default" to select the organization's default network.
+	Network *string `json:"network,omitempty"`
+
+	// OrgSlug Slug of the organization that will own the app, or "personal" for your personal organization. Required.
+	OrgSlug *string `json:"org_slug,omitempty"`
 }
 
 // CreateAppResponse defines model for CreateAppResponse.
 type CreateAppResponse struct {
-	CreatedAt *int    `json:"created_at,omitempty"`
-	Id        *string `json:"id,omitempty"`
+	// CreatedAt When the app was created, in Unix milliseconds.
+	CreatedAt *int `json:"created_at,omitempty"`
+
+	// Id Name of the new app. Despite the field's name, this is not the app's `id` as returned by
+	// Get App.
+	Id *string `json:"id,omitempty"`
 }
 
 // CreateMachineRequest defines model for CreateMachineRequest.
 type CreateMachineRequest struct {
 	// Config An object defining the Machine configuration
-	Config            *FlyMachineConfig `json:"config,omitempty"`
-	LeaseTtl          *int              `json:"lease_ttl,omitempty"`
-	MinSecretsVersion *int              `json:"min_secrets_version,omitempty"`
+	Config *FlyMachineConfig `json:"config,omitempty"`
 
-	// Name Unique name for this Machine. If omitted, one is generated for you
+	// LeaseTtl Acquire a lease on the new Machine that lasts this many seconds. The response's `nonce`
+	// field holds the lease nonce.
+	LeaseTtl *int `json:"lease_ttl,omitempty"`
+
+	// MinSecretsVersion The minimum version of the app's secrets the Machine must run with. Set it to the `version`
+	// returned by the endpoints that set or delete app secrets, so that the Machine is guaranteed
+	// to see those changes. This field belongs at the top level of the request body, not in
+	// `config`. If omitted, the app's current secrets version is looked up for you.
+	MinSecretsVersion *int `json:"min_secrets_version,omitempty"`
+
+	// Name Name for this Machine. If omitted, one is generated for you. Names are not required to be
+	// unique.
 	Name *string `json:"name,omitempty"`
 
-	// Region The target region. Omitting this param launches in the same region as your WireGuard peer connection (somewhere near you).
-	Region                  *string `json:"region,omitempty"`
-	SkipLaunch              *bool   `json:"skip_launch,omitempty"`
-	SkipSecrets             *bool   `json:"skip_secrets,omitempty"`
-	SkipServiceRegistration *bool   `json:"skip_service_registration,omitempty"`
+	// Region The region to create the Machine in, such as `iad`. Also accepts a comma-separated list
+	// of regions and region groups (`any`, `us`, `na`, `sa`, `eu`, `apac`, `africa`,
+	// `asia_pacific`, `europe`, `north_america`, `south_america`), in which case Fly.io picks one
+	// with capacity. If the Machine mounts a volume, defaults to the volume's region; the region
+	// must include it. Otherwise defaults to the region of the API server handling the request,
+	// which is usually the one closest to you.
+	Region *string `json:"region,omitempty"`
+
+	// SkipLaunch Create the Machine without starting it. It ends up `stopped`; start it with the Start
+	// Machine endpoint. Not allowed for spot Machines.
+	SkipLaunch *bool `json:"skip_launch,omitempty"`
+
+	// SkipSecrets Don't look up the app's current secrets version. The Machine still gets the app's
+	// secrets, but may not see recent changes to them. Takes precedence over
+	// `min_secrets_version`.
+	SkipSecrets *bool `json:"skip_secrets,omitempty"`
+
+	// SkipServiceRegistration Create the Machine cordoned, so Fly Proxy doesn't route requests to it until it is
+	// uncordoned. Its services are still registered.
+	SkipServiceRegistration *bool `json:"skip_service_registration,omitempty"`
 }
 
 // CreateVolumeRequest defines model for CreateVolumeRequest.
 type CreateVolumeRequest struct {
-	// AutoBackupEnabled enable scheduled automatic snapshots. Defaults to `true`
-	AutoBackupEnabled *bool            `json:"auto_backup_enabled,omitempty"`
-	Compute           *FlyMachineGuest `json:"compute,omitempty"`
-	ComputeImage      *string          `json:"compute_image,omitempty"`
-	Encrypted         *bool            `json:"encrypted,omitempty"`
-	Fstype            *string          `json:"fstype,omitempty"`
-	Name              *string          `json:"name,omitempty"`
-	Region            *string          `json:"region,omitempty"`
-	RequireUniqueZone *bool            `json:"require_unique_zone,omitempty"`
-	SizeGb            *int             `json:"size_gb,omitempty"`
+	// AutoBackupEnabled Take daily automatic snapshots of the volume. Defaults to `true`.
+	AutoBackupEnabled *bool `json:"auto_backup_enabled,omitempty"`
 
-	// SnapshotId restore from snapshot
-	SnapshotId        *string `json:"snapshot_id,omitempty"`
-	SnapshotRetention *int    `json:"snapshot_retention,omitempty"`
+	// Compute Requirements of the Machine that will use the volume, so that the volume is placed on a
+	// host that can run it. Uses `cpus`, `memory_mb`, `cpu_kind`, `host_dedication_id`, and
+	// `required_host_features`.
+	Compute *FlyMachineGuest `json:"compute,omitempty"`
 
-	// SourceVolumeId fork from remote volume
-	SourceVolumeId    *string `json:"source_volume_id,omitempty"`
-	UniqueZoneAppWide *bool   `json:"unique_zone_app_wide,omitempty"`
+	// ComputeImage Ignored.
+	ComputeImage *string `json:"compute_image,omitempty"`
+
+	// Encrypted Encrypt the volume at rest. Defaults to true. When forking, the source volume's setting
+	// is used.
+	Encrypted *bool `json:"encrypted,omitempty"`
+
+	// Fstype Filesystem to format the volume with: `ext4`, or `raw` for an unformatted block device.
+	Fstype *CreateVolumeRequestFstype `json:"fstype,omitempty"`
+
+	// Name Name of the volume: at most 30 lowercase letters, digits, and underscores. Required.
+	Name *string `json:"name,omitempty"`
+
+	// Region Region to create the volume in. Accepts the same values as the `region` of Create
+	// Machine. When forking, defaults to the source volume's region; otherwise defaults to the
+	// region of the API server handling the request.
+	Region *string `json:"region,omitempty"`
+
+	// RequireUniqueZone Place the volume on a host that has no other volume of the app with the same name in the
+	// region, so that Machines using these volumes don't share a host. Fails with 400 if no
+	// such host is available.
+	RequireUniqueZone *bool `json:"require_unique_zone,omitempty"`
+
+	// SizeGb Size of the volume in GiB, from 1 to the organization's maximum (500 by default).
+	// Required unless forking, in which case it must be omitted and the source volume's size
+	// is used.
+	SizeGb *int `json:"size_gb,omitempty"`
+
+	// SnapshotId ID of a snapshot to restore into the new volume. Mutually exclusive with
+	// `source_volume_id`.
+	SnapshotId *string `json:"snapshot_id,omitempty"`
+
+	// SnapshotRetention Number of days to keep snapshots of the volume, from 1 to 60. Defaults to 5.
+	SnapshotRetention *int `json:"snapshot_retention,omitempty"`
+
+	// SourceVolumeId ID of a volume to fork: the new volume starts as a copy of it. The volume must belong to
+	// an app in the same organization.
+	SourceVolumeId *string `json:"source_volume_id,omitempty"`
+
+	// UniqueZoneAppWide With `require_unique_zone`, avoid hosts with any volume of the app in the region, not
+	// just volumes with the same name.
+	UniqueZoneAppWide *bool `json:"unique_zone_app_wide,omitempty"`
 }
+
+// CreateVolumeRequestFstype Filesystem to format the volume with: `ext4`, or `raw` for an unformatted block device.
+type CreateVolumeRequestFstype string
 
 // DNSRecords defines model for DNSRecords.
 type DNSRecords struct {
-	A                  []string `json:"a,omitempty"`
-	Aaaa               []string `json:"aaaa,omitempty"`
-	AcmeChallengeCname *string  `json:"acme_challenge_cname,omitempty"`
-	Cname              []string `json:"cname,omitempty"`
-	OwnershipTxt       *string  `json:"ownership_txt,omitempty"`
-	ResolvedAddresses  []string `json:"resolved_addresses,omitempty"`
-	Soa                *string  `json:"soa,omitempty"`
+	// A A records found for the hostname.
+	A []string `json:"a,omitempty"`
+
+	// Aaaa AAAA records found for the hostname.
+	Aaaa []string `json:"aaaa,omitempty"`
+
+	// AcmeChallengeCname Target of the `_acme-challenge` CNAME record, if found.
+	AcmeChallengeCname *string `json:"acme_challenge_cname,omitempty"`
+
+	// Cname CNAME records found for the hostname.
+	Cname []string `json:"cname,omitempty"`
+
+	// OwnershipTxt Value of the `_fly-ownership` TXT record, if found.
+	OwnershipTxt *string `json:"ownership_txt,omitempty"`
+
+	// ResolvedAddresses All addresses the hostname resolved to, after following CNAMEs.
+	ResolvedAddresses []string `json:"resolved_addresses,omitempty"`
+
+	// Soa Primary name server from the SOA record of the hostname's zone.
+	Soa *string `json:"soa,omitempty"`
 }
 
 // DNSRequirements defines model for DNSRequirements.
 type DNSRequirements struct {
-	A             []string               `json:"a,omitempty"`
-	Aaaa          []string               `json:"aaaa,omitempty"`
-	AcmeChallenge *AcmeChallenge         `json:"acme_challenge,omitempty"`
-	Cname         *string                `json:"cname,omitempty"`
-	Ownership     *OwnershipVerification `json:"ownership,omitempty"`
+	// A IPv4 addresses the hostname's A records can point to: the app's global IPv4 addresses
+	// and its shared IPv4 address.
+	A []string `json:"a,omitempty"`
+
+	// Aaaa IPv6 addresses the hostname's AAAA records can point to: the app's global IPv6
+	// addresses.
+	Aaaa []string `json:"aaaa,omitempty"`
+
+	// AcmeChallenge Record for DNS-01 validation.
+	AcmeChallenge *AcmeChallenge `json:"acme_challenge,omitempty"`
+
+	// Cname Target the hostname can CNAME to instead of using A and AAAA records.
+	Cname *string `json:"cname,omitempty"`
+
+	// Ownership Record for proving ownership of the hostname.
+	Ownership *OwnershipVerification `json:"ownership,omitempty"`
 }
 
 // DeleteAppSecretResponse defines model for DeleteAppSecretResponse.
 type DeleteAppSecretResponse struct {
+	// Version The app's secrets version after this change. Pass it as `min_secrets_version` when creating or
+	// updating Machines so that they are guaranteed to see the change.
 	Version *int `json:"version,omitempty"`
 }
 
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
-	// Details Deprecated
+	// Details Deprecated: details about some errors. Do not rely on its contents.
 	Details map[string]interface{} `json:"details,omitempty"`
-	Error   *string                `json:"error,omitempty"`
-	Status  *MainStatusCode        `json:"status,omitempty"`
+
+	// Error Human-readable description of the error. Its wording may change; use `status` to tell
+	// errors apart.
+	Error *string `json:"error,omitempty"`
+
+	// Status Machine-readable error code, set for some errors, such as `insufficient_capacity`,
+	// `volume_placement_capacity`, `name_taken`, `exec_request_too_large`, or
+	// `exec_output_too_large`.
+	Status *MainStatusCode `json:"status,omitempty"`
 }
 
 // ExtendVolumeRequest defines model for ExtendVolumeRequest.
 type ExtendVolumeRequest struct {
+	// SizeGb New size of the volume in GiB. Must be larger than the current size and at most the
+	// organization's maximum (500 by default).
 	SizeGb *int `json:"size_gb,omitempty"`
 }
 
 // ExtendVolumeResponse defines model for ExtendVolumeResponse.
 type ExtendVolumeResponse struct {
-	NeedsRestart *bool   `json:"needs_restart,omitempty"`
-	Volume       *Volume `json:"volume,omitempty"`
+	// NeedsRestart Whether the volume is attached to a running Machine that could not resize its filesystem
+	// while running. If true, restart the Machine for the filesystem to use the new size.
+	NeedsRestart *bool `json:"needs_restart,omitempty"`
+
+	// Volume The extended volume.
+	Volume *Volume `json:"volume,omitempty"`
 }
 
 // IPAssignment defines model for IPAssignment.
 type IPAssignment struct {
+	// CreatedAt When the address was assigned to the app, in RFC 3339 format. Null for the app's shared
+	// IPv4 address.
 	CreatedAt *string `json:"created_at,omitempty"`
-	Egress    *bool   `json:"egress,omitempty"`
-	Ip        *string `json:"ip,omitempty"`
+
+	// Egress Whether this is an egress address, used for the app's outbound traffic rather than for
+	// receiving requests.
+	Egress *bool `json:"egress,omitempty"`
+
+	// Ip The IP address.
+	Ip *string `json:"ip,omitempty"`
 
 	// Network The 6PN network a Flycast (private_v6) address belongs to. Null for all other IP types.
-	Network     *IPAssignmentNetwork `json:"network,omitempty"`
-	Region      *string              `json:"region,omitempty"`
-	ServiceName *string              `json:"service_name,omitempty"`
-	Shared      *bool                `json:"shared,omitempty"`
+	Network *IPAssignmentNetwork `json:"network,omitempty"`
+
+	// Region Region the address is scoped to, or `global` for addresses announced in all regions.
+	// Empty for the app's shared IPv4 address.
+	Region *string `json:"region,omitempty"`
+
+	// ServiceName Name of the service the address is scoped to, if any.
+	ServiceName *string `json:"service_name,omitempty"`
+
+	// Shared Whether this is the app's shared IPv4 address, which other apps use too.
+	Shared *bool `json:"shared,omitempty"`
 }
 
 // IPAssignmentNetwork The 6PN network a Flycast (private_v6) address belongs to. Null for all other IP types.
 type IPAssignmentNetwork struct {
 	// Name Network name; empty for the organization's default network.
-	Name    *string `json:"name,omitempty"`
+	Name *string `json:"name,omitempty"`
+
+	// OrgSlug Slug of the organization the network belongs to.
 	OrgSlug *string `json:"org_slug,omitempty"`
 }
 
-// IPAssignmentType Type of IP address to allocate. "egress-pair" allocates both v4 and v6 egress IP addresses (recommended when using egress IPs).
+// IPAssignmentType Type of IP address to allocate. "egress_pair" allocates both v4 and v6 egress IP addresses (recommended when using egress IPs).
 type IPAssignmentType string
 
 // IPPair defines model for IPPair.
 type IPPair struct {
+	// V4 The egress IPv4 address.
 	V4 *string `json:"v4,omitempty"`
+
+	// V6 The egress IPv6 address.
 	V6 *string `json:"v6,omitempty"`
 }
 
 // ImageRef defines model for ImageRef.
 type ImageRef struct {
-	Digest     *string           `json:"digest,omitempty"`
-	Labels     map[string]string `json:"labels,omitempty"`
-	Registry   *string           `json:"registry,omitempty"`
-	Repository *string           `json:"repository,omitempty"`
-	Tag        *string           `json:"tag,omitempty"`
+	// Digest Content digest of the image (`sha256:...`).
+	Digest *string `json:"digest,omitempty"`
+
+	// Labels The image's OCI labels.
+	Labels map[string]string `json:"labels,omitempty"`
+
+	// Registry Registry host of the image, such as `registry.fly.io`.
+	Registry *string `json:"registry,omitempty"`
+
+	// Repository Repository of the image within the registry, such as `library/nginx`.
+	Repository *string `json:"repository,omitempty"`
+
+	// Tag Tag the image was referenced by, if any.
+	Tag *string `json:"tag,omitempty"`
 }
 
 // IssuedCertificate defines model for IssuedCertificate.
 type IssuedCertificate struct {
-	CertificateAuthority *string                `json:"certificate_authority,omitempty"`
-	ExpiresAt            *string                `json:"expires_at,omitempty"`
-	Type                 *IssuedCertificateType `json:"type,omitempty"`
+	// CertificateAuthority The certificate authority that issued the certificate.
+	CertificateAuthority *string `json:"certificate_authority,omitempty"`
+
+	// ExpiresAt When the certificate expires.
+	ExpiresAt *string `json:"expires_at,omitempty"`
+
+	// Type Key type of the certificate.
+	Type *IssuedCertificateType `json:"type,omitempty"`
 }
 
-// IssuedCertificateType defines model for IssuedCertificate.Type.
+// IssuedCertificateType Key type of the certificate.
 type IssuedCertificateType string
 
 // ListAppsResponse defines model for ListAppsResponse.
 type ListAppsResponse struct {
-	Apps      []App `json:"apps,omitempty"`
-	TotalApps *int  `json:"total_apps,omitempty"`
+	// Apps The apps on this page, or all apps if `limit` was not provided.
+	Apps []App `json:"apps,omitempty"`
+
+	// NextCursor Pagination cursor for the next page. Absent when no more apps remain.
+	// Cursors expire 30 minutes after the first page was requested.
+	NextCursor *string `json:"next_cursor,omitempty"`
+
+	// TotalApps The number of matching apps across all pages. Organization-wide listings
+	// retain the first page's count; scoped listings recount using the current
+	// token's permissions. Snapshot bounds exclude newer apps, and replication
+	// lag or deletion during traversal can make totals differ from rows seen.
+	TotalApps *int `json:"total_apps,omitempty"`
 }
 
 // Machine defines model for Machine.
 type Machine struct {
-	Checks           []CheckStatus      `json:"checks,omitempty"`
-	Config           *FlyMachineConfig  `json:"config,omitempty"`
-	Cordoned         *bool              `json:"cordoned,omitempty"`
-	CreatedAt        *string            `json:"created_at,omitempty"`
-	Events           []MachineEvent     `json:"events,omitempty"`
-	HostStatus       *MachineHostStatus `json:"host_status,omitempty"`
-	Id               *string            `json:"id,omitempty"`
-	ImageRef         *ImageRef          `json:"image_ref,omitempty"`
-	IncompleteConfig *FlyMachineConfig  `json:"incomplete_config,omitempty"`
+	// Checks Status of each health check: the Machine's top-level `checks` and its services'
+	// checks.
+	Checks []CheckStatus `json:"checks,omitempty"`
 
-	// InstanceId InstanceID is unique for each version of the machine
-	InstanceId *string        `json:"instance_id,omitempty"`
-	Lease      *StrippedLease `json:"lease,omitempty"`
-	Name       *string        `json:"name,omitempty"`
+	// Config The Machine's configuration, as provided when it was created or last updated, with
+	// `metadata` and `mounts` reflecting their current values. Null when the host is not
+	// reachable (`host_status` is not `ok`) or `summary=true` was requested; see
+	// `incomplete_config`.
+	Config *FlyMachineConfig `json:"config,omitempty"`
 
-	// Nonce Nonce is only every returned on machine creation if a lease_duration was provided.
+	// Cordoned Whether the Machine is cordoned, meaning Fly Proxy does not route requests to it. See
+	// the Cordon Machine endpoint.
+	Cordoned *bool `json:"cordoned,omitempty"`
+
+	// CreatedAt When the Machine was created.
+	CreatedAt *string `json:"created_at,omitempty"`
+
+	// Events Up to 5 of the most recent events of the current Machine version, newest first. Use
+	// the List Events endpoint for more.
+	Events []MachineEvent `json:"events,omitempty"`
+
+	// HostFeatures Features of the Machine's host, for comparison with `config.guest.required_host_features`.
+	// Only returned when the request sets the `fly-include-host-features: true` header.
+	HostFeatures []string `json:"host_features,omitempty"`
+
+	// HostStatus Whether Fly.io could reach the Machine's host: `ok` if it could, `unreachable` if it
+	// could not, in which case the response is built from last known state. `unknown` if the
+	// host's status was not reported.
+	HostStatus *MachineHostStatus `json:"host_status,omitempty"`
+
+	// Id Unique ID of the Machine.
+	Id *string `json:"id,omitempty"`
+
+	// ImageRef The image the Machine runs, as resolved when it was last created or updated.
+	ImageRef *ImageRef `json:"image_ref,omitempty"`
+
+	// IncompleteConfig Last known configuration, returned in place of `config` when the host could not be
+	// reached (`host_status` is not `ok`) or when listing Machines with `summary=true`. It
+	// comes from Fly.io's replicated state rather than the host, so it may be stale or lack
+	// fields.
+	IncompleteConfig *FlyMachineConfig `json:"incomplete_config,omitempty"`
+
+	// InstanceId Same value as `version`.
+	//
+	// Deprecated: use `version`.
+	InstanceId *string `json:"instance_id,omitempty"`
+
+	// Lease The lease currently held on the Machine. Only returned when `include_leases=true`
+	// was requested and a lease is held.
+	Lease *StrippedLease `json:"lease,omitempty"`
+
+	// Name Name of the Machine. Generated when not provided at creation. Names are not required
+	// to be unique.
+	Name *string `json:"name,omitempty"`
+
+	// Nonce Nonce of the lease acquired on the Machine at creation. Only returned when creating a
+	// Machine with `lease_ttl` set. Pass it in the `fly-machine-lease-nonce` header to act on
+	// the Machine while the lease is held.
 	Nonce *string `json:"nonce,omitempty"`
 
-	// PrivateIp PrivateIP is the internal 6PN address of the machine.
+	// PrivateIp The Machine's address on the organization's private (6PN) IPv6 network.
 	PrivateIp *string `json:"private_ip,omitempty"`
-	Region    *string `json:"region,omitempty"`
-	State     *string `json:"state,omitempty"`
+
+	// Region Code of the region the Machine runs in, such as `iad`.
+	Region *string `json:"region,omitempty"`
+
+	// State Current state of the Machine, taken from the status of its most recent event. One of
+	// `created`, `starting`, `started`, `stopping`, `stopped`, `suspending`, `suspended`,
+	// `replacing`, `replaced`, `destroying`, `destroyed`, `failed`, `migrating`, `migrated`,
+	// `archived`, or `pending`. See https://fly.io/docs/machines/machine-states/.
+	State *string `json:"state,omitempty"`
+
+	// UpdatedAt Time of the Machine's most recent event, truncated to whole seconds. The zero time
+	// (0001-01-01T00:00:00Z) if the host could not be reached. With `summary=true`, the time
+	// Fly.io last recorded a change to the Machine.
 	UpdatedAt *string `json:"updated_at,omitempty"`
+
+	// Version Unique ID of this version of the Machine. Every update creates a new version. Pass it
+	// as `current_version` when updating the Machine to reject the update if the Machine has
+	// changed since this version.
+	Version *string `json:"version,omitempty"`
 }
 
-// MachineHostStatus defines model for Machine.HostStatus.
+// MachineHostStatus Whether Fly.io could reach the Machine's host: `ok` if it could, `unreachable` if it
+// could not, in which case the response is built from last known state. `unknown` if the
+// host's status was not reported.
 type MachineHostStatus string
 
 // MachineEvent defines model for MachineEvent.
 type MachineEvent struct {
-	Id        *string                `json:"id,omitempty"`
-	Request   map[string]interface{} `json:"request,omitempty"`
-	Source    *string                `json:"source,omitempty"`
-	Status    *string                `json:"status,omitempty"`
-	Timestamp *int                   `json:"timestamp,omitempty"`
-	Type      *string                `json:"type,omitempty"`
+	// Id Unique ID of the event (a ULID).
+	Id *string `json:"id,omitempty"`
+
+	// Request Details that depend on the event type. For example, `exit` events carry the exit
+	// code and whether the process was killed for running out of memory, and `update`
+	// events carry the new version.
+	Request map[string]interface{} `json:"request,omitempty"`
+
+	// Source Who triggered the event: `user` for requests to this API, `flyd` for the host's
+	// Machine manager acting on its own (for example when a Machine exits or restarts), or
+	// `proxy` for Fly Proxy starting and stopping Machines.
+	Source *string `json:"source,omitempty"`
+
+	// Status The state the Machine moved to with this event, such as `created`, `started`, or
+	// `stopped`. The Machine's `state` is the status of its latest event.
+	Status *string `json:"status,omitempty"`
+
+	// Timestamp When the event happened, in Unix milliseconds.
+	Timestamp *int `json:"timestamp,omitempty"`
+
+	// Type What happened, such as `launch`, `start`, `stop`, `exit`, `restart`, `update`,
+	// `suspension`, `cancel_suspension`, `migration`, `metadata_update`, `archive`, or
+	// `destroy`.
+	Type *string `json:"type,omitempty"`
+}
+
+// OkResponse defines model for OkResponse.
+type OkResponse struct {
+	// Ok Always true.
+	Ok *bool `json:"ok,omitempty"`
 }
 
 // OwnershipVerification defines model for OwnershipVerification.
 type OwnershipVerification struct {
+	// AppValue TXT record value that proves ownership for this app.
 	AppValue *string `json:"app_value,omitempty"`
-	Name     *string `json:"name,omitempty"`
+
+	// Name Name of the TXT record to create, such as `_fly-ownership.example.com`.
+	Name *string `json:"name,omitempty"`
+
+	// OrgValue TXT record value that proves ownership for every app in the organization.
 	OrgValue *string `json:"org_value,omitempty"`
+}
+
+// StartMachineResponse defines model for StartMachineResponse.
+type StartMachineResponse struct {
+	// Migrated Whether the Machine was moved to another host to be started
+	Migrated *bool `json:"migrated,omitempty"`
+
+	// NewHost The host the Machine was moved to, if it was migrated
+	NewHost *string `json:"new_host,omitempty"`
+
+	// PreviousState The state the Machine was in before it was started
+	PreviousState *string `json:"previous_state,omitempty"`
 }
 
 // StopRequest defines model for StopRequest.
 type StopRequest struct {
-	// Signal Example: SIGTERM
+	// Signal Signal to send to the Machine's main process. Defaults to `config.stop_config.signal`, or
+	// SIGINT.
 	Signal *StopRequestSignal `json:"signal,omitempty"`
 
-	// Timeout Example: 1s
+	// Timeout How long to wait for the Machine to exit after sending `signal` before killing it, as a
+	// Go duration string. Defaults to `config.stop_config.timeout`, or 5s.
 	Timeout *string `json:"timeout,omitempty"`
 }
 
-// StopRequestSignal Example: SIGTERM
+// StopRequestSignal Signal to send to the Machine's main process. Defaults to `config.stop_config.signal`, or
+// SIGINT.
 type StopRequestSignal string
 
 // StrippedLease defines model for StrippedLease.
 type StrippedLease struct {
+	// Description Description given when the lease was acquired.
 	Description *string `json:"description,omitempty"`
-	ExpiresAt   *int    `json:"expires_at,omitempty"`
-	Owner       *string `json:"owner,omitempty"`
+
+	// ExpiresAt When the lease expires, in Unix seconds.
+	ExpiresAt *int `json:"expires_at,omitempty"`
+
+	// Owner Email address of the user who acquired the lease.
+	Owner *string `json:"owner,omitempty"`
 }
 
 // UpdateMachineRequest defines model for UpdateMachineRequest.
 type UpdateMachineRequest struct {
-	// Config An object defining the Machine configuration
-	Config            *FlyMachineConfig `json:"config,omitempty"`
-	CurrentVersion    *string           `json:"current_version,omitempty"`
-	LeaseTtl          *int              `json:"lease_ttl,omitempty"`
-	MinSecretsVersion *int              `json:"min_secrets_version,omitempty"`
+	// Config The new Machine configuration. It replaces the current one entirely.
+	Config *FlyMachineConfig `json:"config,omitempty"`
 
-	// Name Unique name for this Machine. If omitted, one is generated for you
+	// CurrentVersion Optional optimistic-concurrency guard: the Machine's `version`, as returned by create,
+	// get or a previous update. When set and it is no longer the Machine's current version,
+	// the update is rejected with 409 Conflict and nothing changes. Omit it to update
+	// unconditionally.
+	CurrentVersion *string `json:"current_version,omitempty"`
+
+	// LeaseTtl Ignored. Use the lease endpoints to lease an existing Machine.
+	LeaseTtl *int `json:"lease_ttl,omitempty"`
+
+	// MinSecretsVersion The minimum version of the app's secrets the Machine must run with. Set it to the `version`
+	// returned by the endpoints that set or delete app secrets, so that the Machine is guaranteed
+	// to see those changes. This field belongs at the top level of the request body, not in
+	// `config`. If omitted, the app's current secrets version is looked up for you.
+	MinSecretsVersion *int `json:"min_secrets_version,omitempty"`
+
+	// Name Ignored.
 	Name *string `json:"name,omitempty"`
 
-	// Region The target region. Omitting this param launches in the same region as your WireGuard peer connection (somewhere near you).
-	Region                  *string `json:"region,omitempty"`
-	SkipLaunch              *bool   `json:"skip_launch,omitempty"`
-	SkipSecrets             *bool   `json:"skip_secrets,omitempty"`
-	SkipServiceRegistration *bool   `json:"skip_service_registration,omitempty"`
+	// Region Not used to place the Machine: an update never moves it to another region or host.
+	Region *string `json:"region,omitempty"`
+
+	// SkipLaunch Apply the update without starting the Machine. It ends up `stopped`; start it with the
+	// Start Machine endpoint. Not allowed for spot Machines.
+	SkipLaunch *bool `json:"skip_launch,omitempty"`
+
+	// SkipSecrets Don't look up the app's current secrets version. The Machine still gets the app's
+	// secrets, but may not see recent changes to them. Takes precedence over
+	// `min_secrets_version`.
+	SkipSecrets *bool `json:"skip_secrets,omitempty"`
+
+	// SkipServiceRegistration Ignored. Use the cordon and uncordon endpoints instead.
+	SkipServiceRegistration *bool `json:"skip_service_registration,omitempty"`
 }
 
 // UpdateVolumeRequest defines model for UpdateVolumeRequest.
 type UpdateVolumeRequest struct {
+	// AutoBackupEnabled Take daily automatic snapshots of the volume. Unchanged if omitted.
 	AutoBackupEnabled *bool `json:"auto_backup_enabled,omitempty"`
-	SnapshotRetention *int  `json:"snapshot_retention,omitempty"`
+
+	// SnapshotRetention Number of days to keep snapshots of the volume, from 1 to 60. Unchanged if omitted.
+	SnapshotRetention *int `json:"snapshot_retention,omitempty"`
 }
 
 // Volume defines model for Volume.
 type Volume struct {
-	AttachedAllocId   *string           `json:"attached_alloc_id,omitempty"`
-	AttachedMachineId *string           `json:"attached_machine_id,omitempty"`
-	AutoBackupEnabled *bool             `json:"auto_backup_enabled,omitempty"`
-	BlockSize         *int              `json:"block_size,omitempty"`
-	Blocks            *int              `json:"blocks,omitempty"`
-	BlocksAvail       *int              `json:"blocks_avail,omitempty"`
-	BlocksFree        *int              `json:"blocks_free,omitempty"`
-	BytesTotal        *int              `json:"bytes_total,omitempty"`
-	BytesUsed         *int              `json:"bytes_used,omitempty"`
-	CreatedAt         *string           `json:"created_at,omitempty"`
-	Encrypted         *bool             `json:"encrypted,omitempty"`
-	Fstype            *string           `json:"fstype,omitempty"`
-	HostStatus        *VolumeHostStatus `json:"host_status,omitempty"`
-	Id                *string           `json:"id,omitempty"`
-	Name              *string           `json:"name,omitempty"`
-	Region            *string           `json:"region,omitempty"`
-	SizeGb            *int              `json:"size_gb,omitempty"`
-	SnapshotRetention *int              `json:"snapshot_retention,omitempty"`
-	State             *string           `json:"state,omitempty"`
-	Type              *VolumeType       `json:"type,omitempty"`
-	Zone              *string           `json:"zone,omitempty"`
+	// AttachedAllocId Always null.
+	//
+	// Deprecated: volumes are no longer attached to Nomad allocations.
+	AttachedAllocId *string `json:"attached_alloc_id,omitempty"`
+
+	// AttachedMachineId ID of the Machine the volume is attached to, or null if it is not attached.
+	AttachedMachineId *string `json:"attached_machine_id,omitempty"`
+
+	// AutoBackupEnabled Whether daily automatic snapshots are taken.
+	AutoBackupEnabled *bool `json:"auto_backup_enabled,omitempty"`
+
+	// BlockSize Size of a filesystem block, in bytes. See `blocks`.
+	BlockSize *int `json:"block_size,omitempty"`
+
+	// Blocks Size of the volume's filesystem, in blocks of `block_size` bytes, as last reported by a
+	// Machine that mounted the volume. 0 if never reported, if the host could not be reached,
+	// or with `summary=true`.
+	Blocks *int `json:"blocks,omitempty"`
+
+	// BlocksAvail Number of filesystem blocks available to unprivileged users. See `blocks`.
+	BlocksAvail *int `json:"blocks_avail,omitempty"`
+
+	// BlocksFree Number of free filesystem blocks, including blocks reserved for the root user. See
+	// `blocks`.
+	BlocksFree *int `json:"blocks_free,omitempty"`
+
+	// BytesTotal Size of the volume, in bytes. 0 if the host could not be reached or with `summary=true`.
+	BytesTotal *int `json:"bytes_total,omitempty"`
+
+	// BytesUsed Bytes of storage the volume occupies on its host. Volumes are thinly provisioned, so this
+	// grows as blocks are written and does not shrink when files are deleted. It is not the
+	// filesystem's usage; use `blocks` and `blocks_free` for that. 0 if the host could not be
+	// reached or with `summary=true`.
+	BytesUsed *int `json:"bytes_used,omitempty"`
+
+	// CreatedAt When the volume was created.
+	CreatedAt *string `json:"created_at,omitempty"`
+
+	// Encrypted Whether the volume is encrypted at rest.
+	Encrypted *bool `json:"encrypted,omitempty"`
+
+	// Fstype Filesystem the volume was formatted with: `ext4`, or `raw` for an unformatted block
+	// device.
+	Fstype *string `json:"fstype,omitempty"`
+
+	// HostFeatures Features of the volume's host. Only returned when the request sets the
+	// `fly-include-host-features: true` header.
+	HostFeatures []string `json:"host_features,omitempty"`
+
+	// HostStatus Whether Fly.io could reach the volume's host: `ok` if it could, `unreachable` or
+	// `unknown` if it could not, in which case host-reported fields are missing.
+	HostStatus *VolumeHostStatus `json:"host_status,omitempty"`
+
+	// Id Unique ID of the volume, such as `vol_1234567890abcdef`.
+	Id *string `json:"id,omitempty"`
+
+	// Name Name of the volume. Several volumes of an app can share a name.
+	Name *string `json:"name,omitempty"`
+
+	// Region Code of the region the volume is in.
+	Region *string `json:"region,omitempty"`
+
+	// RequiredHostFeatures Host features the volume's host was required to have; see `compute.required_host_features`
+	// in the create request.
+	RequiredHostFeatures []string `json:"required_host_features,omitempty"`
+
+	// SizeGb Size of the volume, in GiB.
+	SizeGb *int `json:"size_gb,omitempty"`
+
+	// SnapshotRetention Number of days snapshots of the volume are kept.
+	SnapshotRetention *int `json:"snapshot_retention,omitempty"`
+
+	// State State of the volume, such as `creating`, `created`, `extending`, `restoring`,
+	// `hydrating`, `scheduling_destroy`, `pending_destroy`, `destroying`, `destroyed`, or
+	// `failed`.
+	State *string `json:"state,omitempty"`
+
+	// Type Kind of volume: `local` for regular volumes, or `cache` for volumes that hold
+	// disposable data and support neither snapshots nor restores.
+	Type *VolumeType `json:"type,omitempty"`
+
+	// Zone Identifies the host the volume is on. Volumes with different zones are on different
+	// hosts.
+	Zone *string `json:"zone,omitempty"`
 }
 
-// VolumeHostStatus defines model for Volume.HostStatus.
+// VolumeHostStatus Whether Fly.io could reach the volume's host: `ok` if it could, `unreachable` or
+// `unknown` if it could not, in which case host-reported fields are missing.
 type VolumeHostStatus string
 
-// VolumeType defines model for Volume.Type.
+// VolumeType Kind of volume: `local` for regular volumes, or `cache` for volumes that hold
+// disposable data and support neither snapshots nor restores.
 type VolumeType string
 
 // WaitMachineResponse defines model for WaitMachineResponse.
 type WaitMachineResponse struct {
+	// EventId ID of the event that moved the Machine into `state`. Pass it as `from_event_id` to wait
+	// for a later state change.
 	EventId *string `json:"event_id,omitempty"`
-	Ok      *bool   `json:"ok,omitempty"`
-	State   *string `json:"state,omitempty"`
+
+	// Ok Always true.
+	Ok *bool `json:"ok,omitempty"`
+
+	// State The state the Machine reached, one of the requested states.
+	State *string `json:"state,omitempty"`
+
+	// Version ID of the Machine version that reached `state`.
 	Version *string `json:"version,omitempty"`
 }
 
 // AssignIPRequest defines model for assignIPRequest.
 type AssignIPRequest struct {
-	Network     *string `json:"network,omitempty"`
-	OrgSlug     *string `json:"org_slug,omitempty"`
-	Region      *string `json:"region,omitempty"`
+	// Network Only for `private_v6`: name of the private network to allocate the Flycast address in.
+	// Defaults to the organization's default network.
+	Network *string `json:"network,omitempty"`
+
+	// OrgSlug Only for `private_v6`: slug of the organization whose private network the Flycast address
+	// is allocated in, to make the app reachable from that organization. Defaults to the app's
+	// organization.
+	OrgSlug *string `json:"org_slug,omitempty"`
+
+	// Region Region to scope the address to. Required for egress types. Optional for `v4` and `v6`,
+	// which default to `global` (announced in all regions). Must be empty or `global` for
+	// `shared_v4` and `private_v6`.
+	Region *string `json:"region,omitempty"`
+
+	// ServiceName Scope the address to a single service of the app. Not supported for egress types.
 	ServiceName *string `json:"service_name,omitempty"`
 
-	// Type Type of IP address to allocate. "egress-pair" allocates both v4 and v6 egress IP addresses (recommended when using egress IPs).
+	// Type Type of IP address to allocate. Required.
 	Type *IPAssignmentType `json:"type,omitempty"`
 }
 
 // CreateAcmeCertificateRequest defines model for createAcmeCertificateRequest.
 type CreateAcmeCertificateRequest struct {
+	// Hostname Hostname to request certificates for, such as `example.com` or `*.example.com`.
+	// Required. Hostnames under `fly.dev` are not allowed.
 	Hostname *string `json:"hostname,omitempty"`
 }
 
@@ -1016,8 +1625,12 @@ type FlyContainerConfig struct {
 
 // FlyContainerDependency defines model for fly.ContainerDependency.
 type FlyContainerDependency struct {
+	// Condition When the container can start: once the dependency has `started`, is `healthy`, or has
+	// `exited_successfully`
 	Condition *FlyContainerDependencyCondition `json:"condition,omitempty"`
-	Name      *string                          `json:"name,omitempty"`
+
+	// Name Name of the container this one depends on
+	Name *string `json:"name,omitempty"`
 }
 
 // FlyContainerDependencyCondition defines model for fly.ContainerDependencyCondition.
@@ -1025,14 +1638,17 @@ type FlyContainerDependencyCondition string
 
 // FlyContainerHealthcheck defines model for fly.ContainerHealthcheck.
 type FlyContainerHealthcheck struct {
+	// Exec Check that a command run in the container exits with status 0
 	Exec *FlyExecHealthcheck `json:"exec,omitempty"`
 
 	// FailureThreshold The number of times the check must fail before considering the container unhealthy.
 	FailureThreshold *int `json:"failure_threshold,omitempty"`
 
 	// GracePeriod The time in seconds to wait after a container starts before checking its health.
-	GracePeriod *int                `json:"grace_period,omitempty"`
-	Http        *FlyHTTPHealthcheck `json:"http,omitempty"`
+	GracePeriod *int `json:"grace_period,omitempty"`
+
+	// Http Check that an HTTP request succeeds
+	Http *FlyHTTPHealthcheck `json:"http,omitempty"`
 
 	// Interval The time in seconds between executing the defined check.
 	Interval *int `json:"interval,omitempty"`
@@ -1044,8 +1660,10 @@ type FlyContainerHealthcheck struct {
 	Name *string `json:"name,omitempty"`
 
 	// SuccessThreshold The number of times the check must succeeed before considering the container healthy.
-	SuccessThreshold *int               `json:"success_threshold,omitempty"`
-	Tcp              *FlyTCPHealthcheck `json:"tcp,omitempty"`
+	SuccessThreshold *int `json:"success_threshold,omitempty"`
+
+	// Tcp Check that a TCP connection can be opened
+	Tcp *FlyTCPHealthcheck `json:"tcp,omitempty"`
 
 	// Timeout The time in seconds to wait for the check to complete.
 	Timeout *int `json:"timeout,omitempty"`
@@ -1062,13 +1680,27 @@ type FlyContainerHealthcheckScheme string
 
 // FlyDNSConfig defines model for fly.DNSConfig.
 type FlyDNSConfig struct {
-	DnsForwardRules  []FlyDnsForwardRule `json:"dns_forward_rules,omitempty"`
-	Hostname         *string             `json:"hostname,omitempty"`
-	HostnameFqdn     *string             `json:"hostname_fqdn,omitempty"`
-	Nameservers      []string            `json:"nameservers,omitempty"`
-	Options          []FlyDnsOption      `json:"options,omitempty"`
-	Searches         []string            `json:"searches,omitempty"`
-	SkipRegistration *bool               `json:"skip_registration,omitempty"`
+	// DnsForwardRules Forward DNS queries for some domains to other DNS servers
+	DnsForwardRules []FlyDnsForwardRule `json:"dns_forward_rules,omitempty"`
+
+	// Hostname Hostname of the Machine. Defaults to the Machine ID. Also added to /etc/hosts with the
+	// Machine's 6PN address
+	Hostname *string `json:"hostname,omitempty"`
+
+	// HostnameFqdn Fully qualified domain name added to /etc/hosts for `hostname`
+	HostnameFqdn *string `json:"hostname_fqdn,omitempty"`
+
+	// Nameservers Nameservers to use instead of the default, Fly.io's private DNS server `fdaa::3`
+	Nameservers []string `json:"nameservers,omitempty"`
+
+	// Options Options for /etc/resolv.conf
+	Options []FlyDnsOption `json:"options,omitempty"`
+
+	// Searches Search domains for /etc/resolv.conf
+	Searches []string `json:"searches,omitempty"`
+
+	// SkipRegistration Currently has no effect
+	SkipRegistration *bool `json:"skip_registration,omitempty"`
 }
 
 // FlyEnvFrom EnvVar defines an environment variable to be populated from a machine field, env_var
@@ -1135,36 +1767,58 @@ type FlyHTTPHealthcheck struct {
 
 // FlyHTTPOptions defines model for fly.HTTPOptions.
 type FlyHTTPOptions struct {
-	Compress           *bool                   `json:"compress,omitempty"`
-	H2Backend          *bool                   `json:"h2_backend,omitempty"`
-	HeadersReadTimeout *int                    `json:"headers_read_timeout,omitempty"`
-	IdleTimeout        *int                    `json:"idle_timeout,omitempty"`
-	ReplayCache        []FlyReplayCache        `json:"replay_cache,omitempty"`
-	Response           *FlyHTTPResponseOptions `json:"response,omitempty"`
+	// Compress Compress response bodies. Defaults to true
+	Compress *bool `json:"compress,omitempty"`
+
+	// H2Backend Use HTTP/2 to talk to the Machine
+	H2Backend *bool `json:"h2_backend,omitempty"`
+
+	// HeadersReadTimeout Seconds Fly Proxy waits for a client to send request headers. Defaults to 5
+	HeadersReadTimeout *int `json:"headers_read_timeout,omitempty"`
+
+	// IdleTimeout Seconds a client connection can be idle between requests before it's closed. Defaults to 300
+	IdleTimeout *int `json:"idle_timeout,omitempty"`
+
+	// ReplayCache Cache `fly-replay` responses from the Machine: once a client is replayed, its further
+	// requests are replayed directly, keyed on a cookie or header, without asking the Machine again
+	ReplayCache []FlyReplayCache `json:"replay_cache,omitempty"`
+
+	// Response Changes Fly Proxy makes to responses
+	Response *FlyHTTPResponseOptions `json:"response,omitempty"`
 }
 
 // FlyHTTPResponseOptions defines model for fly.HTTPResponseOptions.
 type FlyHTTPResponseOptions struct {
-	Headers  map[string]map[string]interface{} `json:"headers,omitempty"`
-	Pristine *bool                             `json:"pristine,omitempty"`
+	// Headers Response headers to set. A string sets the header, a list of strings sets it to multiple
+	// values, and false removes it
+	Headers map[string]map[string]interface{} `json:"headers,omitempty"`
+
+	// Pristine Don't let Fly Proxy add or change any response headers
+	Pristine *bool `json:"pristine,omitempty"`
 }
 
 // FlyMachineCacheDrive defines model for fly.MachineCacheDrive.
 type FlyMachineCacheDrive struct {
+	// Path Optional absolute guest mount path. When set, the device is formatted as ext4.
+	// Without a path, the device retains legacy raw block behavior. Contents survive
+	// same-host restarts and path changes, but are discarded on size or mode changes,
+	// relocation, recovery on another host, and cloning.
+	Path *string `json:"path,omitempty"`
+
+	// SizeMb Fixed size of the Machine-owned cache drive in MiB. At most 51200.
+	// With a path, at least 16 MiB is required; without a path, 0 disables the device.
 	SizeMb *int `json:"size_mb,omitempty"`
 }
 
 // FlyMachineCheck defines model for fly.MachineCheck.
 type FlyMachineCheck struct {
 	// GracePeriod The time to wait after a VM starts before checking its health
-	//
-	// Example: 1s
-	GracePeriod *string                `json:"grace_period,omitempty"`
-	Headers     []FlyMachineHTTPHeader `json:"headers,omitempty"`
+	GracePeriod *string `json:"grace_period,omitempty"`
+
+	// Headers For http checks, headers to send with the request
+	Headers []FlyMachineHTTPHeader `json:"headers,omitempty"`
 
 	// Interval The time between connectivity checks
-	//
-	// Example: 15s
 	Interval *string `json:"interval,omitempty"`
 
 	// Kind Kind of the check (informational, readiness)
@@ -1183,8 +1837,6 @@ type FlyMachineCheck struct {
 	Protocol *string `json:"protocol,omitempty"`
 
 	// Timeout The maximum time a connection can take before being reported as failing its health check
-	//
-	// Example: 2s
 	Timeout *string `json:"timeout,omitempty"`
 
 	// TlsServerName If the protocol is https, the hostname to use for TLS certificate validation
@@ -1203,63 +1855,127 @@ type FlyMachineCheckKind string
 // FlyMachineConfig defines model for fly.MachineConfig.
 type FlyMachineConfig struct {
 	// AutoDestroy Optional boolean telling the Machine to destroy itself once it’s complete (default false)
-	AutoDestroy *bool                 `json:"auto_destroy,omitempty"`
-	CacheDrive  *FlyMachineCacheDrive `json:"cache_drive,omitempty"`
+	AutoDestroy *bool `json:"auto_destroy,omitempty"`
+
+	// CacheDrive Beta: a cache drive attached to the Machine. This field may be removed in the future
+	CacheDrive *FlyMachineCacheDrive `json:"cache_drive,omitempty"`
 
 	// Checks An optional object that defines one or more named top-level checks. The key for each check is the check name.
 	Checks map[string]FlyMachineCheck `json:"checks,omitempty"`
 
-	// Containers Containers are a list of containers that will run in the machine. Currently restricted to
-	// only specific organizations.
+	// Containers Containers are a list of containers that will run in the machine, each from its own image.
 	Containers []FlyContainerConfig `json:"containers,omitempty"`
 
 	// DisableMachineAutostart Deprecated: use Service.Autostart instead
-	DisableMachineAutostart *bool         `json:"disable_machine_autostart,omitempty"`
-	Dns                     *FlyDNSConfig `json:"dns,omitempty"`
+	DisableMachineAutostart *bool `json:"disable_machine_autostart,omitempty"`
+
+	// Dns DNS settings for the Machine
+	Dns *FlyDNSConfig `json:"dns,omitempty"`
 
 	// Env An object filled with key/value pairs to be set as environment variables
-	Env   map[string]string `json:"env,omitempty"`
-	Files []FlyFile         `json:"files,omitempty"`
-	Guest *FlyMachineGuest  `json:"guest,omitempty"`
+	Env map[string]string `json:"env,omitempty"`
+
+	// Files Files to write into the Machine, from either a raw value or an app secret
+	Files []FlyFile `json:"files,omitempty"`
+
+	// Guest The resources (CPUs, memory, etc.) allocated to the Machine
+	Guest *FlyMachineGuest `json:"guest,omitempty"`
 
 	// Image The docker image to run
-	Image     *string             `json:"image,omitempty"`
-	Init      *FlyMachineInit     `json:"init,omitempty"`
-	Metadata  map[string]string   `json:"metadata,omitempty"`
-	Metrics   *FlyMachineMetrics  `json:"metrics,omitempty"`
-	Mounts    []FlyMachineMount   `json:"mounts,omitempty"`
+	Image *string `json:"image,omitempty"`
+
+	// Init Arguments for init, Fly.io's footprint inside the Machine, which controls how your own code is run
+	Init *FlyMachineInit `json:"init,omitempty"`
+
+	// Metadata Key/value pairs of Machine metadata. Fly.io uses metadata internally for routing, process groups, and clusters
+	Metadata map[string]string `json:"metadata,omitempty"`
+
+	// Metrics An optional metrics endpoint for Prometheus on Fly.io to scrape
+	Metrics *FlyMachineMetrics `json:"metrics,omitempty"`
+
+	// Mounts Persistent volumes to mount in the Machine. A Machine can mount at most one volume, which must be on
+	// the same host. The mounted volume cannot be changed by updating the Machine
+	Mounts []FlyMachineMount `json:"mounts,omitempty"`
+
+	// Processes Multiple processes to run within this one Machine, all from the Machine's image. Unrelated to the
+	// process groups in fly.toml, which run on separate Machines. To run processes from different
+	// images, use containers instead
 	Processes []FlyMachineProcess `json:"processes,omitempty"`
 
-	// Restart The Machine restart policy defines whether and how flyd restarts a Machine after its main process exits. See https://fly.io/docs/machines/guides-examples/machine-restart-policy/.
-	Restart  *FlyMachineRestart  `json:"restart,omitempty"`
-	Rootfs   *FlyMachineRootfs   `json:"rootfs,omitempty"`
-	Schedule *string             `json:"schedule,omitempty"`
+	// Restart Whether and how the Machine is restarted after its main process exits
+	Restart *FlyMachineRestart `json:"restart,omitempty"`
+
+	// Rootfs Beta: the size of the Machine's root filesystem and whether it persists. This field may be
+	// removed in the future
+	Rootfs *FlyMachineRootfs `json:"rootfs,omitempty"`
+
+	// Schedule Run the Machine at an interval: one of hourly, daily, weekly or monthly. The interval starts when
+	// the Machine is created
+	Schedule *string `json:"schedule,omitempty"`
+
+	// Services Network services that Fly Proxy routes traffic to
 	Services []FlyMachineService `json:"services,omitempty"`
 
 	// Size Deprecated: use Guest instead
-	Size *string         `json:"size,omitempty"`
+	Size *string `json:"size,omitempty"`
+
+	// Spot Spot pricing settings for the Machine
 	Spot *FlyMachineSpot `json:"spot,omitempty"`
 
 	// Standbys Standbys enable a machine to be a standby for another. In the event of a hardware failure,
 	// the standby machine will be started.
-	Standbys   []string       `json:"standbys,omitempty"`
-	Statics    []FlyStatic    `json:"statics,omitempty"`
+	Standbys []string `json:"standbys,omitempty"`
+
+	// Statics Static files to serve under a URL prefix. Fly Proxy routes matching requests to a file server
+	// inside the Machine, bypassing your application's own process; the Machine must be running. The
+	// files are read either from a path inside the Machine or from a Tigris bucket that belongs to the
+	// app; no bucket is created for you
+	Statics []FlyStatic `json:"statics,omitempty"`
+
+	// StopConfig How the Machine is shut down gracefully: the signal sent to it and how long to wait before a hard shutdown
 	StopConfig *FlyStopConfig `json:"stop_config,omitempty"`
 }
 
 // FlyMachineGuest defines model for fly.MachineGuest.
 type FlyMachineGuest struct {
-	CpuKind          *string  `json:"cpu_kind,omitempty"`
-	Cpus             *int     `json:"cpus,omitempty"`
-	GpuKind          *string  `json:"gpu_kind,omitempty"`
-	Gpus             *int     `json:"gpus,omitempty"`
-	HostDedicationId *string  `json:"host_dedication_id,omitempty"`
-	KernelArgs       []string `json:"kernel_args,omitempty"`
-	MaxMemoryMb      *int     `json:"max_memory_mb,omitempty"`
-	MemoryMb         *int     `json:"memory_mb,omitempty"`
+	// CpuKind Kind of CPU: shared or performance. Performance CPUs must be enabled for the organization.
+	// Defaults to shared when `guest` is omitted
+	CpuKind *string `json:"cpu_kind,omitempty"`
+
+	// Cpus Number of CPUs: 1, 2, 4, 6, 8, 10, 12, 14, 16, 32, 64 or 128, up to 8 for shared and 16 for
+	// performance CPUs unless the organization's limit is higher. Defaults to 1 when `guest` is
+	// omitted
+	Cpus *int `json:"cpus,omitempty"`
+
+	// GpuKind No longer supported. Requests that set it are rejected
+	GpuKind *string `json:"gpu_kind,omitempty"`
+
+	// Gpus No longer supported. Requests that set it are rejected
+	Gpus *int `json:"gpus,omitempty"`
+
+	// HostDedicationId Place the Machine on hosts dedicated to the organization under this ID. Only available to
+	// organizations with dedicated hosts
+	HostDedicationId *string `json:"host_dedication_id,omitempty"`
+
+	// KernelArgs Extra arguments appended to the guest kernel command line
+	KernelArgs []string `json:"kernel_args,omitempty"`
+
+	// MaxMemoryMb Memory in MiB that the Machine's memory limit can later be raised to without a restart, using
+	// the memory endpoints. Must be at least memory_mb and at most the per-CPU maximum. The Machine
+	// starts with a limit of memory_mb
+	MaxMemoryMb *int `json:"max_memory_mb,omitempty"`
+
+	// MemoryMb Memory in MiB. Must be a multiple of 256 for shared and 1024 for performance CPUs, and
+	// between 256 and 2048 (shared) or 2048 and 8192 (performance) per CPU. Defaults to 256 when
+	// `guest` is omitted
+	MemoryMb *int `json:"memory_mb,omitempty"`
 
 	// PersistRootfs Deprecated: use MachineConfig.Rootfs instead
 	PersistRootfs *FlyMachineGuestPersistRootfs `json:"persist_rootfs,omitempty"`
+
+	// RequiredHostFeatures Host features the Machine's host must have, such as `storage-tier-1`. At most 16, each made
+	// of lowercase letters, digits and dashes. Each feature must be enabled for the organization
+	RequiredHostFeatures []string `json:"required_host_features,omitempty"`
 }
 
 // FlyMachineGuestPersistRootfs Deprecated: use MachineConfig.Rootfs instead
@@ -1276,61 +1992,122 @@ type FlyMachineHTTPHeader struct {
 
 // FlyMachineInit defines model for fly.MachineInit.
 type FlyMachineInit struct {
-	Cmd        []string `json:"cmd,omitempty"`
+	// Cmd Replaces the image's CMD. It's appended to the entrypoint
+	Cmd []string `json:"cmd,omitempty"`
+
+	// Entrypoint Replaces the image's ENTRYPOINT
 	Entrypoint []string `json:"entrypoint,omitempty"`
-	Exec       []string `json:"exec,omitempty"`
+
+	// Exec Command to run instead of the image's ENTRYPOINT and CMD. Takes precedence over entrypoint
+	// and cmd
+	Exec []string `json:"exec,omitempty"`
+
+	// KernelArgs Currently has no effect. Use `guest.kernel_args` instead
 	KernelArgs []string `json:"kernel_args,omitempty"`
-	SwapSizeMb *int     `json:"swap_size_mb,omitempty"`
-	Tty        *bool    `json:"tty,omitempty"`
+
+	// SwapSizeMb Size in MiB of a swap device to give the Machine. Machines with swap cannot be suspended
+	SwapSizeMb *int `json:"swap_size_mb,omitempty"`
+
+	// Tty Currently has no effect
+	Tty *bool `json:"tty,omitempty"`
 }
 
 // FlyMachineMetrics defines model for fly.MachineMetrics.
 type FlyMachineMetrics struct {
-	Https *bool   `json:"https,omitempty"`
-	Path  *string `json:"path,omitempty"`
-	Port  *int    `json:"port,omitempty"`
+	// Https Scrape over HTTPS instead of HTTP
+	Https *bool `json:"https,omitempty"`
+
+	// Path HTTP path to scrape. Defaults to `/`
+	Path *string `json:"path,omitempty"`
+
+	// Port Port in the Machine to scrape metrics from
+	Port *int `json:"port,omitempty"`
 }
 
 // FlyMachineMount defines model for fly.MachineMount.
 type FlyMachineMount struct {
+	// AddSizeGb With automatic extension, grow the volume by this many GB at a time. Between 1 and 100.
+	// Mutually exclusive with add_size_percent
 	AddSizeGb *int `json:"add_size_gb,omitempty"`
 
 	// AddSizePercent AddSizePercent grows by a percentage of the current size, rounded up to GiB.
 	// It is mutually exclusive with AddSizeGb.
-	AddSizePercent         *int  `json:"add_size_percent,omitempty"`
-	Encrypted              *bool `json:"encrypted,omitempty"`
-	ExtendThresholdPercent *int  `json:"extend_threshold_percent,omitempty"`
+	AddSizePercent *int `json:"add_size_percent,omitempty"`
+
+	// Encrypted Whether the volume is encrypted. Set by Fly.io; ignored in requests
+	Encrypted *bool `json:"encrypted,omitempty"`
+
+	// ExtendThresholdPercent Enable automatic volume extension: grow the volume when its usage exceeds this percentage.
+	// Between 50 and 99; 0 disables it
+	ExtendThresholdPercent *int `json:"extend_threshold_percent,omitempty"`
 
 	// MinAddSizeGb MinAddSizeGb is the minimum proportional growth in GiB (default 1).
-	MinAddSizeGb *int    `json:"min_add_size_gb,omitempty"`
-	Name         *string `json:"name,omitempty"`
-	Path         *string `json:"path,omitempty"`
-	SizeGb       *int    `json:"size_gb,omitempty"`
-	SizeGbLimit  *int    `json:"size_gb_limit,omitempty"`
-	Volume       *string `json:"volume,omitempty"`
+	MinAddSizeGb *int `json:"min_add_size_gb,omitempty"`
+
+	// Name Name of the volume. Set by Fly.io; ignored in requests
+	Name *string `json:"name,omitempty"`
+
+	// Path Absolute path in the Machine to mount the volume at. Required
+	Path *string `json:"path,omitempty"`
+
+	// SizeGb Size of the volume in GB. Set by Fly.io; ignored in requests
+	SizeGb *int `json:"size_gb,omitempty"`
+
+	// SizeGbLimit With automatic extension, never grow the volume beyond this size in GB. At most the
+	// organization's maximum volume size
+	SizeGbLimit *int `json:"size_gb_limit,omitempty"`
+
+	// Volume ID (`vol_...`) or name of the volume to mount. Required. With a name, any unattached volume
+	// of the app with that name in the Machine's region is used
+	Volume *string `json:"volume,omitempty"`
 }
 
 // FlyMachinePort defines model for fly.MachinePort.
 type FlyMachinePort struct {
-	EndPort           *int                  `json:"end_port,omitempty"`
-	ForceHttps        *bool                 `json:"force_https,omitempty"`
-	Handlers          []string              `json:"handlers,omitempty"`
-	HttpOptions       *FlyHTTPOptions       `json:"http_options,omitempty"`
-	Port              *int                  `json:"port,omitempty"`
+	// EndPort Last public port of a range
+	EndPort *int `json:"end_port,omitempty"`
+
+	// ForceHttps Redirect plain HTTP requests to HTTPS
+	ForceHttps *bool `json:"force_https,omitempty"`
+
+	// Handlers How Fly Proxy handles connections before forwarding them: `tls` terminates TLS, `pg_tls`
+	// terminates PostgreSQL TLS, `http` handles HTTP, `proxy_proto` adds a PROXY protocol header.
+	// Without handlers, raw TCP is forwarded
+	Handlers []string `json:"handlers,omitempty"`
+
+	// HttpOptions Options for the `http` handler
+	HttpOptions *FlyHTTPOptions `json:"http_options,omitempty"`
+
+	// Port Public port. Use either port, or start_port and end_port
+	Port *int `json:"port,omitempty"`
+
+	// ProxyProtoOptions Options for the `proxy_proto` handler
 	ProxyProtoOptions *FlyProxyProtoOptions `json:"proxy_proto_options,omitempty"`
-	StartPort         *int                  `json:"start_port,omitempty"`
-	TlsOptions        *FlyTLSOptions        `json:"tls_options,omitempty"`
+
+	// StartPort First public port of a range
+	StartPort *int `json:"start_port,omitempty"`
+
+	// TlsOptions Options for the `tls` handler
+	TlsOptions *FlyTLSOptions `json:"tls_options,omitempty"`
 }
 
 // FlyMachineProcess defines model for fly.MachineProcess.
 type FlyMachineProcess struct {
-	Cmd        []string          `json:"cmd,omitempty"`
-	Entrypoint []string          `json:"entrypoint,omitempty"`
-	Env        map[string]string `json:"env,omitempty"`
+	// Cmd Replaces the image's CMD for this process. It's appended to the entrypoint
+	Cmd []string `json:"cmd,omitempty"`
+
+	// Entrypoint Replaces the image's ENTRYPOINT for this process
+	Entrypoint []string `json:"entrypoint,omitempty"`
+
+	// Env Environment variables for this process, in addition to the Machine's `env`
+	Env map[string]string `json:"env,omitempty"`
 
 	// EnvFrom EnvFrom can be provided to set environment variables from machine fields.
 	EnvFrom []FlyEnvFrom `json:"env_from,omitempty"`
-	Exec    []string     `json:"exec,omitempty"`
+
+	// Exec Command to run instead of the image's ENTRYPOINT and CMD. Takes precedence over entrypoint
+	// and cmd
+	Exec []string `json:"exec,omitempty"`
 
 	// IgnoreAppSecrets IgnoreAppSecrets can be set to true to ignore the secrets for the App the Machine belongs to
 	// and only use the secrets provided at the process level. The default/legacy behavior is to use
@@ -1340,7 +2117,9 @@ type FlyMachineProcess struct {
 	// Secrets Secrets can be provided at the process level to explicitly indicate which secrets should be
 	// used for the process. If not provided, the secrets provided at the machine level will be used.
 	Secrets []FlyMachineSecret `json:"secrets,omitempty"`
-	User    *string            `json:"user,omitempty"`
+
+	// User User to run the process as, instead of the image's USER
+	User *string `json:"user,omitempty"`
 }
 
 // FlyMachineRestart The Machine restart policy defines whether and how flyd restarts a Machine after its main process exits. See https://fly.io/docs/machines/guides-examples/machine-restart-policy/.
@@ -1361,11 +2140,18 @@ type FlyMachineRestartPolicy string
 
 // FlyMachineRootfs defines model for fly.MachineRootfs.
 type FlyMachineRootfs struct {
+	// Persist Whether changes to the root filesystem are kept. `never` (default): reset on every start.
+	// `restart`: kept across stops and restarts, reset when the Machine is updated. `always`: also
+	// kept across updates
 	Persist *FlyMachineRootfsPersist `json:"persist,omitempty"`
-	SizeGb  *int                     `json:"size_gb,omitempty"`
+
+	// SizeGb Size of the root filesystem in GB. At most 50; 0 uses the default
+	SizeGb *int `json:"size_gb,omitempty"`
 }
 
-// FlyMachineRootfsPersist defines model for FlyMachineRootfs.Persist.
+// FlyMachineRootfsPersist Whether changes to the root filesystem are kept. `never` (default): reset on every start.
+// `restart`: kept across stops and restarts, reset when the Machine is updated. `always`: also
+// kept across updates
 type FlyMachineRootfsPersist string
 
 // FlyMachineSecret A Secret needing to be set in the environment of the Machine. env_var is required
@@ -1381,6 +2167,7 @@ type FlyMachineSecret struct {
 
 // FlyMachineService defines model for fly.MachineService.
 type FlyMachineService struct {
+	// Autostart Whether Fly Proxy starts stopped or suspended Machines when requests arrive. Defaults to true
 	Autostart *bool `json:"autostart,omitempty"`
 
 	// Autostop Accepts a string (new format) or a boolean (old format). For backward compatibility with older clients, the API continues to use booleans for "off" and "stop" in responses.
@@ -1390,14 +2177,29 @@ type FlyMachineService struct {
 	Autostop *FlyMachineServiceAutostop `json:"autostop,omitempty"`
 
 	// Checks An optional list of service checks
-	Checks                   []FlyMachineServiceCheck      `json:"checks,omitempty"`
-	Concurrency              *FlyMachineServiceConcurrency `json:"concurrency,omitempty"`
-	ForceInstanceDescription *string                       `json:"force_instance_description,omitempty"`
-	ForceInstanceKey         *string                       `json:"force_instance_key,omitempty"`
-	InternalPort             *int                          `json:"internal_port,omitempty"`
-	MinMachinesRunning       *int                          `json:"min_machines_running,omitempty"`
-	Ports                    []FlyMachinePort              `json:"ports,omitempty"`
-	Protocol                 *string                       `json:"protocol,omitempty"`
+	Checks []FlyMachineServiceCheck `json:"checks,omitempty"`
+
+	// Concurrency Load limits Fly Proxy uses to balance traffic across Machines
+	Concurrency *FlyMachineServiceConcurrency `json:"concurrency,omitempty"`
+
+	// ForceInstanceDescription Currently has no effect
+	ForceInstanceDescription *string `json:"force_instance_description,omitempty"`
+
+	// ForceInstanceKey Currently has no effect
+	ForceInstanceKey *string `json:"force_instance_key,omitempty"`
+
+	// InternalPort Port in the Machine that Fly Proxy forwards traffic to. Defaults to 8080
+	InternalPort *int `json:"internal_port,omitempty"`
+
+	// MinMachinesRunning When autostop is on, the number of Machines Fly Proxy keeps running in the app's primary
+	// region (`PRIMARY_REGION` env var). Machines in other regions can all be stopped
+	MinMachinesRunning *int `json:"min_machines_running,omitempty"`
+
+	// Ports Public ports that Fly Proxy accepts traffic on
+	Ports []FlyMachinePort `json:"ports,omitempty"`
+
+	// Protocol Protocol: tcp or udp. Defaults to tcp
+	Protocol *string `json:"protocol,omitempty"`
 }
 
 // FlyMachineServiceAutostop Accepts a string (new format) or a boolean (old format). For backward compatibility with older clients, the API continues to use booleans for "off" and "stop" in responses.
@@ -1409,14 +2211,12 @@ type FlyMachineServiceAutostop string
 // FlyMachineServiceCheck defines model for fly.MachineServiceCheck.
 type FlyMachineServiceCheck struct {
 	// GracePeriod The time to wait after a VM starts before checking its health
-	//
-	// Example: 1s
-	GracePeriod *string                `json:"grace_period,omitempty"`
-	Headers     []FlyMachineHTTPHeader `json:"headers,omitempty"`
+	GracePeriod *string `json:"grace_period,omitempty"`
+
+	// Headers For http checks, headers to send with the request
+	Headers []FlyMachineHTTPHeader `json:"headers,omitempty"`
 
 	// Interval The time between connectivity checks
-	//
-	// Example: 15s
 	Interval *string `json:"interval,omitempty"`
 
 	// Method For http checks, the HTTP method to use to when making the request
@@ -1432,8 +2232,6 @@ type FlyMachineServiceCheck struct {
 	Protocol *string `json:"protocol,omitempty"`
 
 	// Timeout The maximum time a connection can take before being reported as failing its health check
-	//
-	// Example: 2s
 	Timeout *string `json:"timeout,omitempty"`
 
 	// TlsServerName If the protocol is https, the hostname to use for TLS certificate validation
@@ -1448,9 +2246,16 @@ type FlyMachineServiceCheck struct {
 
 // FlyMachineServiceConcurrency defines model for fly.MachineServiceConcurrency.
 type FlyMachineServiceConcurrency struct {
-	HardLimit *int    `json:"hard_limit,omitempty"`
-	SoftLimit *int    `json:"soft_limit,omitempty"`
-	Type      *string `json:"type,omitempty"`
+	// HardLimit Fly Proxy sends no more than this many connections or requests to a Machine at once. 0 means
+	// no hard limit
+	HardLimit *int `json:"hard_limit,omitempty"`
+
+	// SoftLimit Above this many connections or requests, Fly Proxy prefers other Machines. Defaults to 20,
+	// and is lowered to hard_limit if higher
+	SoftLimit *int `json:"soft_limit,omitempty"`
+
+	// Type What to count: `connections` (default) or `requests`
+	Type *string `json:"type,omitempty"`
 }
 
 // FlyMachineSpot defines model for fly.MachineSpot.
@@ -1461,17 +2266,27 @@ type FlyMachineSpot struct {
 
 // FlyProxyProtoOptions defines model for fly.ProxyProtoOptions.
 type FlyProxyProtoOptions struct {
+	// FlySrc With version v2, add the Fly-Src header and its signature to the PROXY protocol header
+	FlySrc *bool `json:"fly_src,omitempty"`
+
+	// Version PROXY protocol version: v1 (default) or v2
 	Version *string `json:"version,omitempty"`
 }
 
 // FlyReplayCache defines model for fly.ReplayCache.
 type FlyReplayCache struct {
+	// AllowBypass Let clients skip the cache by sending the `fly-replay-cache-control: skip` header
 	AllowBypass *bool `json:"allow_bypass,omitempty"`
 
 	// Name Name of the cookie or header to key the cache on
-	Name       *string `json:"name,omitempty"`
+	Name *string `json:"name,omitempty"`
+
+	// PathPrefix Requests whose path starts with this prefix use the rule. May start with a hostname, e.g.
+	// `example.com/api/*`
 	PathPrefix *string `json:"path_prefix,omitempty"`
-	TtlSeconds *int    `json:"ttl_seconds,omitempty"`
+
+	// TtlSeconds How long a cached replay is used, in seconds
+	TtlSeconds *int `json:"ttl_seconds,omitempty"`
 
 	// Type Currently either "cookie" or "header"
 	Type *FlyReplayCacheType `json:"type,omitempty"`
@@ -1482,21 +2297,31 @@ type FlyReplayCacheType string
 
 // FlyStatic defines model for fly.Static.
 type FlyStatic struct {
-	GuestPath     string  `json:"guest_path"`
+	// GuestPath The path inside the Machine, or inside tigris_bucket when set, where the files to serve are located
+	GuestPath string `json:"guest_path"`
+
+	// IndexDocument The document served for requests to the URL prefix or any of its subfolders. Only works with tigris_bucket
 	IndexDocument *string `json:"index_document,omitempty"`
-	TigrisBucket  *string `json:"tigris_bucket,omitempty"`
-	UrlPrefix     string  `json:"url_prefix"`
+
+	// TigrisBucket An existing Tigris bucket belonging to the app to read the files from, instead of the Machine's
+	// filesystem. The files are still served through the Machine
+	TigrisBucket *string `json:"tigris_bucket,omitempty"`
+
+	// UrlPrefix The URL prefix under which the files are served
+	UrlPrefix string `json:"url_prefix"`
 }
 
 // FlyStopConfig defines model for fly.StopConfig.
 type FlyStopConfig struct {
+	// Signal Signal to send to the Machine's processes. Defaults to SIGINT
 	Signal *FlyStopConfigSignal `json:"signal,omitempty"`
 
-	// Timeout Example: 10s
+	// Timeout How long to wait for the Machine to exit after sending the signal, before killing it. At most
+	// 5 minutes (1 minute for spot Machines). Defaults to 5s (60s for spot Machines)
 	Timeout *string `json:"timeout,omitempty"`
 }
 
-// FlyStopConfigSignal defines model for FlyStopConfig.Signal.
+// FlyStopConfigSignal Signal to send to the Machine's processes. Defaults to SIGINT
 type FlyStopConfigSignal string
 
 // FlyTCPHealthcheck defines model for fly.TCPHealthcheck.
@@ -1507,9 +2332,14 @@ type FlyTCPHealthcheck struct {
 
 // FlyTLSOptions defines model for fly.TLSOptions.
 type FlyTLSOptions struct {
-	Alpn              []string `json:"alpn,omitempty"`
-	DefaultSelfSigned *bool    `json:"default_self_signed,omitempty"`
-	Versions          []string `json:"versions,omitempty"`
+	// Alpn ALPN protocols to offer, e.g. `h2`, `http/1.1`. Defaults to `h2` and `http/1.1`
+	Alpn []string `json:"alpn,omitempty"`
+
+	// DefaultSelfSigned Use a self-signed certificate when there is no certificate for the requested hostname
+	DefaultSelfSigned *bool `json:"default_self_signed,omitempty"`
+
+	// Versions TLS versions to accept: `TLSv1.2`, `TLSv1.3`. Defaults to both
+	Versions []string `json:"versions,omitempty"`
 }
 
 // FlyUnhealthyPolicy defines model for fly.UnhealthyPolicy.
@@ -1517,25 +2347,37 @@ type FlyUnhealthyPolicy string
 
 // FlyDnsForwardRule defines model for fly.dnsForwardRule.
 type FlyDnsForwardRule struct {
-	Addr     *string `json:"addr,omitempty"`
+	// Addr Address and port of the DNS server to forward queries to over TCP, e.g. `10.0.0.1:53`
+	Addr *string `json:"addr,omitempty"`
+
+	// Basename Domain to forward queries for, including subdomains. Must end in a dot, e.g. `example.com.`
 	Basename *string `json:"basename,omitempty"`
 }
 
 // FlyDnsOption defines model for fly.dnsOption.
 type FlyDnsOption struct {
-	Name  *string `json:"name,omitempty"`
+	// Name Option name, e.g. `ndots`
+	Name *string `json:"name,omitempty"`
+
+	// Value Option value, e.g. `5`
 	Value *string `json:"value,omitempty"`
 }
 
 // ListCertificatesResponse defines model for listCertificatesResponse.
 type ListCertificatesResponse struct {
+	// Certificates The certificates on this page, ordered by when they were added.
 	Certificates []CertificateSummary `json:"certificates,omitempty"`
-	NextCursor   *string              `json:"next_cursor,omitempty"`
-	TotalCount   *int                 `json:"total_count,omitempty"`
+
+	// NextCursor Pagination cursor for the next page. Absent when no more certificates remain.
+	NextCursor *string `json:"next_cursor,omitempty"`
+
+	// TotalCount Number of certificates matching `filter` (and after `cursor`, if given), across all pages.
+	TotalCount *int `json:"total_count,omitempty"`
 }
 
 // ListIPAssignmentsResponse defines model for listIPAssignmentsResponse.
 type ListIPAssignmentsResponse struct {
+	// Ips The app's IP addresses, including its shared IPv4 address and egress addresses.
 	Ips []IPAssignment `json:"ips,omitempty"`
 }
 
@@ -1544,8 +2386,11 @@ type MainStatusCode string
 
 // UpsertMetadataKeyRequest defines model for upsertMetadataKeyRequest.
 type UpsertMetadataKeyRequest struct {
+	// UpdatedAt Time to record for the change in the Machine's `metadata_update` event. Defaults to now.
 	UpdatedAt *string `json:"updated_at,omitempty"`
-	Value     *string `json:"value,omitempty"`
+
+	// Value Value to set. Must not be empty or whitespace only.
+	Value *string `json:"value,omitempty"`
 }
 
 // AppsListParams defines parameters for AppsList.
@@ -1555,6 +2400,12 @@ type AppsListParams struct {
 
 	// AppRole Filter apps by role
 	AppRole *string `form:"app_role,omitempty" json:"app_role,omitempty"`
+
+	// Limit The number of apps to fetch (must be between 1 and 5000). Providing a limit enables pagination. Without it, all apps are returned in one response.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Cursor Value of next_cursor from the previous page. Requires limit. Later pages only include apps that existed when the first page was requested. Apps created in the seconds before the first page was requested may be missing. Cursors expire 30 minutes after the first page was requested.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
 // AppCertificatesListParams defines parameters for AppCertificatesList.
@@ -1588,16 +2439,25 @@ type MachinesListParams struct {
 
 	// MetadataKey Filter by a machine metadata key and exact value. Replace {key} with the metadata key, for example metadata.foo=bar. Specify multiple metadata filters to require all matches.
 	MetadataKey *string `form:"metadata.{key},omitempty" json:"metadata.{key},omitempty"`
+
+	// Cursor Value of the fly-next-cursor response header from the previous page. Requires limit.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Limit The number of machines to fetch (must be between 1 and 1000). Providing a limit enables pagination. This limit is advisory; responses may be shorter, or even empty, even when more machines remain.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // MachinesDeleteParams defines parameters for MachinesDelete.
 type MachinesDeleteParams struct {
-	// Force Force kill the machine if it's running
+	// Force Kill the Machine first if it's not stopped, suspended, failed, pending or archived
 	Force *bool `form:"force,omitempty" json:"force,omitempty"`
 }
 
 // MachinesShowParams defines parameters for MachinesShow.
 type MachinesShowParams struct {
+	// Version 26-character Machine version ID; returns that version of the Machine instead of the current one
+	Version *string `form:"version,omitempty" json:"version,omitempty"`
+
 	// IncludeLeases Include machine lease
 	IncludeLeases *bool `form:"include_leases,omitempty" json:"include_leases,omitempty"`
 }
@@ -1619,10 +2479,10 @@ type MachinesWaitParams struct {
 	// FromEventId 26-character Machine event ID to start waiting after
 	FromEventId *string `form:"from_event_id,omitempty" json:"from_event_id,omitempty"`
 
-	// Timeout wait timeout. default 60s
+	// Timeout Wait timeout in seconds. Defaults to 60.
 	Timeout *int `form:"timeout,omitempty" json:"timeout,omitempty"`
 
-	// State desired state(s), supports repeated or comma-separated values
+	// State Desired state(s). Supports repeated or comma-separated values. settled matches any of started, stopped, suspended, failed, destroyed, or archived. Defaults to started.
 	State *MachinesWaitParamsState `form:"state,omitempty" json:"state,omitempty"`
 }
 
@@ -1631,19 +2491,19 @@ type MachinesWaitParamsState string
 
 // SecretsListParams defines parameters for SecretsList.
 type SecretsListParams struct {
-	// MinVersion Minimum secrets version to return. Returned when setting a new secret
+	// MinVersion Minimum secrets version to read, as returned by the endpoints that set or delete secrets. Use it to read your own writes.
 	MinVersion *string `form:"min_version,omitempty" json:"min_version,omitempty"`
 
-	// ShowSecrets Show the secret values.
+	// ShowSecrets Include secret values. Only allowed when the request comes from a Machine of the app; otherwise the request fails with 403.
 	ShowSecrets *bool `form:"show_secrets,omitempty" json:"show_secrets,omitempty"`
 }
 
 // SecretGetParams defines parameters for SecretGet.
 type SecretGetParams struct {
-	// MinVersion Minimum secrets version to return. Returned when setting a new secret
+	// MinVersion Minimum secrets version to read, as returned by the endpoints that set or delete secrets. Use it to read your own writes.
 	MinVersion *string `form:"min_version,omitempty" json:"min_version,omitempty"`
 
-	// ShowSecrets Show the secret value.
+	// ShowSecrets Include the secret value. Only allowed when the request comes from a Machine of the app; otherwise the request fails with 403.
 	ShowSecrets *bool `form:"show_secrets,omitempty" json:"show_secrets,omitempty"`
 }
 
@@ -1651,6 +2511,12 @@ type SecretGetParams struct {
 type VolumesListParams struct {
 	// Summary Only return summary info about volumes (omit blocks, block size, etc)
 	Summary *bool `form:"summary,omitempty" json:"summary,omitempty"`
+
+	// Cursor Value of the fly-next-cursor response header from the previous page. Requires limit.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Limit The number of volumes to fetch (must be between 1 and 1000). Providing a limit enables pagination. This limit is advisory; responses may be shorter, or even empty, even when more volumes remain.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // AppsCreateJSONRequestBody defines body for AppsCreate for application/json ContentType.
@@ -1888,7 +2754,11 @@ type ClientInterface interface {
 
 	// MachinesDelete Destroy Machine
 	//
-	// Delete a specific Machine within an app by Machine ID, with an optional force parameter to force kill the Machine if it's running.
+	// Delete a specific Machine within an app by Machine ID.
+	//
+	// Only a Machine in the `stopped`, `suspended`, `failed`, `pending` or `archived` state can be deleted. Deleting a Machine in any other state, such as `started`, fails with `412 Precondition Failed` unless you set `force=true`, which kills the Machine first. Deleting a Machine that is already `destroying` or `destroyed` succeeds without doing anything.
+	//
+	// If someone else holds a lease on the Machine, the request fails with `409 Conflict`. Pass the lease nonce in the `fly-machine-lease-nonce` header to delete a Machine you hold the lease on.
 	//
 	// Corresponds with DELETE /v1/apps/{app_name}/machines/{machine_id} (the `MachinesDelete` operationId).
 	MachinesDelete(ctx context.Context, appName string, machineId string, params *MachinesDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1984,6 +2854,8 @@ type ClientInterface interface {
 
 	// SecretsUpdateWithBody Update app secrets belonging to an app
 	//
+	// Running Machines don't pick up the change on their own: create or update Machines with `min_secrets_version` set to the returned `version` for them to see it.
+	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /v1/apps/{app_name}/secrets (the `SecretsUpdate` operationId).
@@ -1991,12 +2863,16 @@ type ClientInterface interface {
 
 	// SecretsUpdate Update app secrets belonging to an app
 	//
+	// Running Machines don't pick up the change on their own: create or update Machines with `min_secrets_version` set to the returned `version` for them to see it.
+	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /v1/apps/{app_name}/secrets (the `SecretsUpdate` operationId).
 	SecretsUpdate(ctx context.Context, appName string, body SecretsUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SecretDelete Delete an app secret
+	//
+	// Running Machines don't pick up the change on their own: create or update Machines with `min_secrets_version` set to the returned `version` for them to see it.
 	//
 	// Corresponds with DELETE /v1/apps/{app_name}/secrets/{secret_name} (the `SecretDelete` operationId).
 	SecretDelete(ctx context.Context, appName string, secretName string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -2390,7 +3266,11 @@ func (c *Client) MachinesCreate(ctx context.Context, appName string, body Machin
 
 // MachinesDelete Destroy Machine
 //
-// Delete a specific Machine within an app by Machine ID, with an optional force parameter to force kill the Machine if it's running.
+// Delete a specific Machine within an app by Machine ID.
+//
+// Only a Machine in the `stopped`, `suspended`, `failed`, `pending` or `archived` state can be deleted. Deleting a Machine in any other state, such as `started`, fails with `412 Precondition Failed` unless you set `force=true`, which kills the Machine first. Deleting a Machine that is already `destroying` or `destroyed` succeeds without doing anything.
+//
+// If someone else holds a lease on the Machine, the request fails with `409 Conflict`. Pass the lease nonce in the `fly-machine-lease-nonce` header to delete a Machine you hold the lease on.
 //
 // Corresponds with DELETE /v1/apps/{app_name}/machines/{machine_id} (the `MachinesDelete` operationId).
 func (c *Client) MachinesDelete(ctx context.Context, appName string, machineId string, params *MachinesDeleteParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -2606,6 +3486,8 @@ func (c *Client) SecretsList(ctx context.Context, appName string, params *Secret
 
 // SecretsUpdateWithBody Update app secrets belonging to an app
 //
+// Running Machines don't pick up the change on their own: create or update Machines with `min_secrets_version` set to the returned `version` for them to see it.
+//
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /v1/apps/{app_name}/secrets (the `SecretsUpdate` operationId).
@@ -2623,6 +3505,8 @@ func (c *Client) SecretsUpdateWithBody(ctx context.Context, appName string, cont
 
 // SecretsUpdate Update app secrets belonging to an app
 //
+// Running Machines don't pick up the change on their own: create or update Machines with `min_secrets_version` set to the returned `version` for them to see it.
+//
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /v1/apps/{app_name}/secrets (the `SecretsUpdate` operationId).
@@ -2639,6 +3523,8 @@ func (c *Client) SecretsUpdate(ctx context.Context, appName string, body Secrets
 }
 
 // SecretDelete Delete an app secret
+//
+// Running Machines don't pick up the change on their own: create or update Machines with `min_secrets_version` set to the returned `version` for them to see it.
 //
 // Corresponds with DELETE /v1/apps/{app_name}/secrets/{secret_name} (the `SecretDelete` operationId).
 func (c *Client) SecretDelete(ctx context.Context, appName string, secretName string, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -2872,6 +3758,30 @@ func NewAppsListRequest(server string, params *AppsListParams) (*http.Request, e
 		if params.AppRole != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "app_role", *params.AppRole, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -3487,6 +4397,30 @@ func NewMachinesListRequest(server string, appName string, params *MachinesListP
 
 		}
 
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -3657,6 +4591,18 @@ func NewMachinesShowRequest(server string, appName string, machineId string, par
 		// styled parameters, preserving literal commas as delimiters
 		// per the OpenAPI spec (e.g. "color=blue,black,brown").
 		var rawQueryFragments []string
+
+		if params.Version != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "version", *params.Version, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
 
 		if params.IncludeLeases != nil {
 
@@ -4366,6 +5312,30 @@ func NewVolumesListRequest(server string, appName string, params *VolumesListPar
 
 		}
 
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -4809,7 +5779,11 @@ type ClientWithResponsesInterface interface {
 
 	// MachinesDeleteWithResponse Destroy Machine
 	//
-	// Delete a specific Machine within an app by Machine ID, with an optional force parameter to force kill the Machine if it's running.
+	// Delete a specific Machine within an app by Machine ID.
+	//
+	// Only a Machine in the `stopped`, `suspended`, `failed`, `pending` or `archived` state can be deleted. Deleting a Machine in any other state, such as `started`, fails with `412 Precondition Failed` unless you set `force=true`, which kills the Machine first. Deleting a Machine that is already `destroying` or `destroyed` succeeds without doing anything.
+	//
+	// If someone else holds a lease on the Machine, the request fails with `409 Conflict`. Pass the lease nonce in the `fly-machine-lease-nonce` header to delete a Machine you hold the lease on.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -4917,6 +5891,8 @@ type ClientWithResponsesInterface interface {
 
 	// SecretsUpdateWithBodyWithResponse Update app secrets belonging to an app
 	//
+	// Running Machines don't pick up the change on their own: create or update Machines with `min_secrets_version` set to the returned `version` for them to see it.
+	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/apps/{app_name}/secrets (the `SecretsUpdate` operationId).
@@ -4924,12 +5900,16 @@ type ClientWithResponsesInterface interface {
 
 	// SecretsUpdateWithResponse Update app secrets belonging to an app
 	//
+	// Running Machines don't pick up the change on their own: create or update Machines with `min_secrets_version` set to the returned `version` for them to see it.
+	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /v1/apps/{app_name}/secrets (the `SecretsUpdate` operationId).
 	SecretsUpdateWithResponse(ctx context.Context, appName string, body SecretsUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*SecretsUpdateResponse, error)
 
 	// SecretDeleteWithResponse Delete an app secret
+	//
+	// Running Machines don't pick up the change on their own: create or update Machines with `min_secrets_version` set to the returned `version` for them to see it.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -5030,11 +6010,18 @@ type AppsListResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *ListAppsResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *ErrorResponse
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r AppsListResponse) GetJSON200() *ListAppsResponse {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r AppsListResponse) GetJSON400() *ErrorResponse {
+	return r.JSON400
 }
 
 // GetBody returns the raw response body bytes
@@ -5365,11 +6352,18 @@ type AppCertificatesCheckResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *CertificateCheckResponse
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *ErrorResponse
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r AppCertificatesCheckResponse) GetJSON200() *CertificateCheckResponse {
 	return r.JSON200
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r AppCertificatesCheckResponse) GetJSON404() *ErrorResponse {
+	return r.JSON404
 }
 
 // GetBody returns the raw response body bytes
@@ -5447,11 +6441,32 @@ type AppIPAssignmentsCreateResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *AssignIPResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *ErrorResponse
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *ErrorResponse
+	// JSON422 the response for an HTTP 422 `application/json` response
+	JSON422 *ErrorResponse
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r AppIPAssignmentsCreateResponse) GetJSON200() *AssignIPResponse {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r AppIPAssignmentsCreateResponse) GetJSON400() *ErrorResponse {
+	return r.JSON400
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r AppIPAssignmentsCreateResponse) GetJSON404() *ErrorResponse {
+	return r.JSON404
+}
+
+// GetJSON422 returns the response for an HTTP 422 `application/json` response
+func (r AppIPAssignmentsCreateResponse) GetJSON422() *ErrorResponse {
+	return r.JSON422
 }
 
 // GetBody returns the raw response body bytes
@@ -5486,6 +6501,13 @@ func (r AppIPAssignmentsCreateResponse) ContentType() string {
 type AppIPAssignmentsDeleteResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *ErrorResponse
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r AppIPAssignmentsDeleteResponse) GetJSON404() *ErrorResponse {
+	return r.JSON404
 }
 
 // GetBody returns the raw response body bytes
@@ -5517,16 +6539,30 @@ func (r AppIPAssignmentsDeleteResponse) ContentType() string {
 	return ""
 }
 
+// MachinesListResponse200Headers the declared response headers of an HTTP 200 response for MachinesList
+type MachinesListResponse200Headers struct {
+	FlyNextCursor *string
+}
+
 type MachinesListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *[]Machine
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *ErrorResponse
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *MachinesListResponse200Headers
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r MachinesListResponse) GetJSON200() *[]Machine {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r MachinesListResponse) GetJSON400() *ErrorResponse {
+	return r.JSON400
 }
 
 // GetBody returns the raw response body bytes
@@ -5602,6 +6638,27 @@ func (r MachinesCreateResponse) ContentType() string {
 type MachinesDeleteResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *OkResponse
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *ErrorResponse
+	// JSON412 the response for an HTTP 412 `application/json` response
+	JSON412 *ErrorResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r MachinesDeleteResponse) GetJSON200() *OkResponse {
+	return r.JSON200
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r MachinesDeleteResponse) GetJSON409() *ErrorResponse {
+	return r.JSON409
+}
+
+// GetJSON412 returns the response for an HTTP 412 `application/json` response
+func (r MachinesDeleteResponse) GetJSON412() *ErrorResponse {
+	return r.JSON412
 }
 
 // GetBody returns the raw response body bytes
@@ -5681,6 +6738,8 @@ type MachinesUpdateResponse struct {
 	JSON200 *Machine
 	// JSON400 the response for an HTTP 400 `application/json` response
 	JSON400 *ErrorResponse
+	// JSON409 the response for an HTTP 409 `application/json` response
+	JSON409 *ErrorResponse
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
@@ -5691,6 +6750,11 @@ func (r MachinesUpdateResponse) GetJSON200() *Machine {
 // GetJSON400 returns the response for an HTTP 400 `application/json` response
 func (r MachinesUpdateResponse) GetJSON400() *ErrorResponse {
 	return r.JSON400
+}
+
+// GetJSON409 returns the response for an HTTP 409 `application/json` response
+func (r MachinesUpdateResponse) GetJSON409() *ErrorResponse {
+	return r.JSON409
 }
 
 // GetBody returns the raw response body bytes
@@ -5807,6 +6871,13 @@ func (r MachinesUpsertMetadataResponse) ContentType() string {
 type MachinesStartResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *StartMachineResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r MachinesStartResponse) GetJSON200() *StartMachineResponse {
+	return r.JSON200
 }
 
 // GetBody returns the raw response body bytes
@@ -5841,8 +6912,15 @@ func (r MachinesStartResponse) ContentType() string {
 type MachinesStopResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *OkResponse
 	// JSON400 the response for an HTTP 400 `application/json` response
 	JSON400 *ErrorResponse
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r MachinesStopResponse) GetJSON200() *OkResponse {
+	return r.JSON200
 }
 
 // GetJSON400 returns the response for an HTTP 400 `application/json` response
@@ -5932,11 +7010,18 @@ type SecretsListResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *AppSecrets
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *ErrorResponse
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r SecretsListResponse) GetJSON200() *AppSecrets {
 	return r.JSON200
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r SecretsListResponse) GetJSON403() *ErrorResponse {
+	return r.JSON403
 }
 
 // GetBody returns the raw response body bytes
@@ -6062,11 +7147,25 @@ type SecretGetResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *AppSecret
+	// JSON403 the response for an HTTP 403 `application/json` response
+	JSON403 *ErrorResponse
+	// JSON404 the response for an HTTP 404 `application/json` response
+	JSON404 *ErrorResponse
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r SecretGetResponse) GetJSON200() *AppSecret {
 	return r.JSON200
+}
+
+// GetJSON403 returns the response for an HTTP 403 `application/json` response
+func (r SecretGetResponse) GetJSON403() *ErrorResponse {
+	return r.JSON403
+}
+
+// GetJSON404 returns the response for an HTTP 404 `application/json` response
+func (r SecretGetResponse) GetJSON404() *ErrorResponse {
+	return r.JSON404
 }
 
 // GetBody returns the raw response body bytes
@@ -6098,16 +7197,30 @@ func (r SecretGetResponse) ContentType() string {
 	return ""
 }
 
+// VolumesListResponse200Headers the declared response headers of an HTTP 200 response for VolumesList
+type VolumesListResponse200Headers struct {
+	FlyNextCursor *string
+}
+
 type VolumesListResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *[]Volume
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *ErrorResponse
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *VolumesListResponse200Headers
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r VolumesListResponse) GetJSON200() *[]Volume {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r VolumesListResponse) GetJSON400() *ErrorResponse {
+	return r.JSON400
 }
 
 // GetBody returns the raw response body bytes
@@ -6607,7 +7720,11 @@ func (c *ClientWithResponses) MachinesCreateWithResponse(ctx context.Context, ap
 
 // MachinesDeleteWithResponse Destroy Machine
 //
-// Delete a specific Machine within an app by Machine ID, with an optional force parameter to force kill the Machine if it's running.
+// Delete a specific Machine within an app by Machine ID.
+//
+// Only a Machine in the `stopped`, `suspended`, `failed`, `pending` or `archived` state can be deleted. Deleting a Machine in any other state, such as `started`, fails with `412 Precondition Failed` unless you set `force=true`, which kills the Machine first. Deleting a Machine that is already `destroying` or `destroyed` succeeds without doing anything.
+//
+// If someone else holds a lease on the Machine, the request fails with `409 Conflict`. Pass the lease nonce in the `fly-machine-lease-nonce` header to delete a Machine you hold the lease on.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -6787,6 +7904,8 @@ func (c *ClientWithResponses) SecretsListWithResponse(ctx context.Context, appNa
 
 // SecretsUpdateWithBodyWithResponse Update app secrets belonging to an app
 //
+// Running Machines don't pick up the change on their own: create or update Machines with `min_secrets_version` set to the returned `version` for them to see it.
+//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/apps/{app_name}/secrets (the `SecretsUpdate` operationId).
@@ -6800,6 +7919,8 @@ func (c *ClientWithResponses) SecretsUpdateWithBodyWithResponse(ctx context.Cont
 
 // SecretsUpdateWithResponse Update app secrets belonging to an app
 //
+// Running Machines don't pick up the change on their own: create or update Machines with `min_secrets_version` set to the returned `version` for them to see it.
+//
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /v1/apps/{app_name}/secrets (the `SecretsUpdate` operationId).
@@ -6812,6 +7933,8 @@ func (c *ClientWithResponses) SecretsUpdateWithResponse(ctx context.Context, app
 }
 
 // SecretDeleteWithResponse Delete an app secret
+//
+// Running Machines don't pick up the change on their own: create or update Machines with `min_secrets_version` set to the returned `version` for them to see it.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -6992,6 +8115,13 @@ func ParseAppsListResponse(rsp *http.Response) (*AppsListResponse, error) {
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
 
 	}
 
@@ -7202,6 +8332,13 @@ func ParseAppCertificatesCheckResponse(rsp *http.Response) (*AppCertificatesChec
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	}
 
 	return response, nil
@@ -7254,6 +8391,27 @@ func ParseAppIPAssignmentsCreateResponse(rsp *http.Response) (*AppIPAssignmentsC
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
 	}
 
 	return response, nil
@@ -7270,6 +8428,19 @@ func ParseAppIPAssignmentsDeleteResponse(rsp *http.Response) (*AppIPAssignmentsD
 	response := &AppIPAssignmentsDeleteResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	}
 
 	return response, nil
@@ -7296,6 +8467,26 @@ func ParseMachinesListResponse(rsp *http.Response) (*MachinesListResponse, error
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers MachinesListResponse200Headers
+		if values := rsp.Header.Values("fly-next-cursor"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "fly-next-cursor", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.FlyNextCursor = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil
@@ -7338,6 +8529,30 @@ func ParseMachinesDeleteResponse(rsp *http.Response) (*MachinesDeleteResponse, e
 	response := &MachinesDeleteResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OkResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 412:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON412 = &dest
+
 	}
 
 	return response, nil
@@ -7396,6 +8611,13 @@ func ParseMachinesUpdateResponse(rsp *http.Response) (*MachinesUpdateResponse, e
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 
@@ -7470,6 +8692,16 @@ func ParseMachinesStartResponse(rsp *http.Response) (*MachinesStartResponse, err
 		HTTPResponse: rsp,
 	}
 
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest StartMachineResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
 	return response, nil
 }
 
@@ -7487,8 +8719,12 @@ func ParseMachinesStopResponse(rsp *http.Response) (*MachinesStopResponse, error
 	}
 
 	switch {
-	case rsp.StatusCode == 200:
-		break // No content-type
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest OkResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
 		var dest ErrorResponse
@@ -7555,6 +8791,13 @@ func ParseSecretsListResponse(rsp *http.Response) (*SecretsListResponse, error) 
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	}
 
@@ -7641,6 +8884,20 @@ func ParseSecretGetResponse(rsp *http.Response) (*SecretGetResponse, error) {
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
 	}
 
 	return response, nil
@@ -7667,6 +8924,26 @@ func ParseVolumesListResponse(rsp *http.Response) (*VolumesListResponse, error) 
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers VolumesListResponse200Headers
+		if values := rsp.Header.Values("fly-next-cursor"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "fly-next-cursor", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.FlyNextCursor = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil
