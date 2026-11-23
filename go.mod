@@ -1,6 +1,6 @@
 module github.com/ampbase-io/terraform-provider-fly
 
-go 1.26.11
+go 1.27.4
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.3
