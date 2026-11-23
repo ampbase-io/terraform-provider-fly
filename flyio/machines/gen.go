@@ -1202,10 +1202,12 @@ type ListAppsResponse struct {
 	// Cursors expire 30 minutes after the first page was requested.
 	NextCursor *string `json:"next_cursor,omitempty"`
 
-	// TotalApps The number of matching apps across all pages. Organization-wide listings
-	// retain the first page's count; scoped listings recount using the current
-	// token's permissions. Snapshot bounds exclude newer apps, and replication
-	// lag or deletion during traversal can make totals differ from rows seen.
+	// TotalApps The number of matching apps across all pages. With an organization-wide
+	// token, it is counted when the first page is requested and not updated
+	// afterwards, so it excludes apps created later and includes apps deleted
+	// while paginating. With an app-scoped token, such as a deploy token, it is
+	// recounted on each page and includes only the apps the token can read.
+	// Either way, it may differ slightly from the number of apps returned.
 	TotalApps *int `json:"total_apps,omitempty"`
 }
 
@@ -1799,14 +1801,11 @@ type FlyHTTPResponseOptions struct {
 
 // FlyMachineCacheDrive defines model for fly.MachineCacheDrive.
 type FlyMachineCacheDrive struct {
-	// Path Optional absolute guest mount path. When set, the device is formatted as ext4.
-	// Without a path, the device retains legacy raw block behavior. Contents survive
-	// same-host restarts and path changes, but are discarded on size or mode changes,
-	// relocation, recovery on another host, and cloning.
+	// Path Absolute path in the Machine at which to mount the cache disk.
 	Path *string `json:"path,omitempty"`
 
-	// SizeMb Fixed size of the Machine-owned cache drive in MiB. At most 51200.
-	// With a path, at least 16 MiB is required; without a path, 0 disables the device.
+	// SizeMb Size of the cache disk in MiB. Between 16 and 51200.
+	// Changing the size discards the disk's contents.
 	SizeMb *int `json:"size_mb,omitempty"`
 }
 
@@ -1830,7 +1829,7 @@ type FlyMachineCheck struct {
 	// Path For http checks, the path to send the request to
 	Path *string `json:"path,omitempty"`
 
-	// Port The port to connect to, often the same as internal_port
+	// Port The port to connect to. Required for top-level checks
 	Port *int `json:"port,omitempty"`
 
 	// Protocol For http checks, whether to use http or https
@@ -1857,8 +1856,9 @@ type FlyMachineConfig struct {
 	// AutoDestroy Optional boolean telling the Machine to destroy itself once it’s complete (default false)
 	AutoDestroy *bool `json:"auto_destroy,omitempty"`
 
-	// CacheDrive Beta: a cache drive attached to the Machine. This field may be removed in the future
-	CacheDrive *FlyMachineCacheDrive `json:"cache_drive,omitempty"`
+	// CacheDisk Semi-durable cache disk attached to the Machine. Contents generally survive Machine stops, restarts, and updates,
+	// but durability is not guaranteed. Expect Machines to start with an empty cache disk at any time
+	CacheDisk *FlyMachineCacheDrive `json:"cache_disk,omitempty"`
 
 	// Checks An optional object that defines one or more named top-level checks. The key for each check is the check name.
 	Checks map[string]FlyMachineCheck `json:"checks,omitempty"`
@@ -2225,7 +2225,7 @@ type FlyMachineServiceCheck struct {
 	// Path For http checks, the path to send the request to
 	Path *string `json:"path,omitempty"`
 
-	// Port The port to connect to, often the same as internal_port
+	// Port The port to connect to. Defaults to the service's internal_port
 	Port *int `json:"port,omitempty"`
 
 	// Protocol For http checks, whether to use http or https

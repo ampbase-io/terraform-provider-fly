@@ -1134,7 +1134,7 @@
             "type": "string"
           },
           "total_apps": {
-            "description": "The number of matching apps across all pages. Organization-wide listings\nretain the first page's count; scoped listings recount using the current\ntoken's permissions. Snapshot bounds exclude newer apps, and replication\nlag or deletion during traversal can make totals differ from rows seen.",
+            "description": "The number of matching apps across all pages. With an organization-wide\ntoken, it is counted when the first page is requested and not updated\nafterwards, so it excludes apps created later and includes apps deleted\nwhile paginating. With an app-scoped token, such as a deploy token, it is\nrecounted on each page and includes only the apps the token can read.\nEither way, it may differ slightly from the number of apps returned.",
             "type": "integer"
           }
         },
@@ -1816,6 +1816,7 @@
           "plan": {
             "description": "Plan slug.",
             "enum": [
+              "dev-256",
               "basic",
               "starter",
               "launch",
@@ -1914,6 +1915,7 @@
           "plan": {
             "description": "Plan slug.",
             "enum": [
+              "dev-256",
               "basic",
               "starter",
               "launch",
@@ -2036,6 +2038,44 @@
         },
         "type": "object"
       },
+      "PostgresMaintenanceWindow": {
+        "properties": {
+          "day": {
+            "description": "Day of the week the window starts on.",
+            "enum": [
+              "sunday",
+              "monday",
+              "tuesday",
+              "wednesday",
+              "thursday",
+              "friday",
+              "saturday"
+            ],
+            "example": "sunday",
+            "type": "string"
+          },
+          "duration_hours": {
+            "description": "Length of the window in hours.",
+            "example": 3,
+            "maximum": 8,
+            "minimum": 3,
+            "type": "integer"
+          },
+          "start_hour": {
+            "description": "Hour of the day the window starts, in the cluster's timezone.",
+            "example": 1,
+            "maximum": 23,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "timezone": {
+            "description": "IANA timezone the window is expressed in, derived from the cluster's region.",
+            "example": "America/New_York",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "PostgresNodeEndpoints": {
         "properties": {
           "direct": {
@@ -2088,6 +2128,7 @@
           "plan": {
             "description": "Plan slug. Pass it as `plan` when creating or forking a cluster.",
             "enum": [
+              "dev-256",
               "basic",
               "starter",
               "launch",
@@ -2839,10 +2880,10 @@
       "createPostgresClusterRequest": {
         "properties": {
           "disk_size_gb": {
-            "description": "Disk size in gigabytes.",
+            "description": "Disk size in gigabytes. Defaults to the plan's starting size: 1 for dev-256 and 10 for the other plans.",
             "example": 10,
             "maximum": 1000,
-            "minimum": 10,
+            "minimum": 1,
             "type": "integer"
           },
           "name": {
@@ -2866,6 +2907,7 @@
           "plan": {
             "description": "Plan slug selecting CPU, memory, and disk sizing. Matched case-insensitively.",
             "enum": [
+              "dev-256",
               "basic",
               "starter",
               "launch",
@@ -3459,11 +3501,11 @@
       "fly.MachineCacheDrive": {
         "properties": {
           "path": {
-            "description": "Optional absolute guest mount path. When set, the device is formatted as ext4.\nWithout a path, the device retains legacy raw block behavior. Contents survive\nsame-host restarts and path changes, but are discarded on size or mode changes,\nrelocation, recovery on another host, and cloning.",
+            "description": "Absolute path in the Machine at which to mount the cache disk.",
             "type": "string"
           },
           "size_mb": {
-            "description": "Fixed size of the Machine-owned cache drive in MiB. At most 51200.\nWith a path, at least 16 MiB is required; without a path, 0 disables the device.",
+            "description": "Size of the cache disk in MiB. Between 16 and 51200.\nChanging the size discards the disk's contents.",
             "type": "integer"
           }
         },
@@ -3505,7 +3547,7 @@
             "type": "string"
           },
           "port": {
-            "description": "The port to connect to, often the same as internal_port",
+            "description": "The port to connect to. Required for top-level checks",
             "type": "integer"
           },
           "protocol": {
@@ -3538,13 +3580,13 @@
             "description": "Optional boolean telling the Machine to destroy itself once it’s complete (default false)",
             "type": "boolean"
           },
-          "cache_drive": {
+          "cache_disk": {
             "allOf": [
               {
                 "$ref": "#/components/schemas/fly.MachineCacheDrive"
               }
             ],
-            "description": "Beta: a cache drive attached to the Machine. This field may be removed in the future",
+            "description": "Semi-durable cache disk attached to the Machine. Contents generally survive Machine stops, restarts, and updates,\nbut durability is not guaranteed. Expect Machines to start with an empty cache disk at any time",
             "type": "object"
           },
           "checks": {
@@ -4134,7 +4176,7 @@
             "type": "string"
           },
           "port": {
-            "description": "The port to connect to, often the same as internal_port",
+            "description": "The port to connect to. Defaults to the service's internal_port",
             "type": "integer"
           },
           "protocol": {
@@ -4406,6 +4448,7 @@
           "plan": {
             "description": "Plan slug selecting CPU and memory sizing for the fork. Defaults to the source cluster's plan. Matched case-insensitively.",
             "enum": [
+              "dev-256",
               "basic",
               "starter",
               "launch",
@@ -5026,6 +5069,53 @@
         },
         "type": "object"
       },
+      "showPostgresMaintenanceWindowResponse": {
+        "properties": {
+          "data": {
+            "description": "The cluster's maintenance window, or null when it has none and its maintenance can run at any time.",
+            "properties": {
+              "day": {
+                "description": "Day of the week the window starts on.",
+                "enum": [
+                  "sunday",
+                  "monday",
+                  "tuesday",
+                  "wednesday",
+                  "thursday",
+                  "friday",
+                  "saturday"
+                ],
+                "example": "sunday",
+                "type": "string"
+              },
+              "duration_hours": {
+                "description": "Length of the window in hours.",
+                "example": 3,
+                "maximum": 8,
+                "minimum": 3,
+                "type": "integer"
+              },
+              "start_hour": {
+                "description": "Hour of the day the window starts, in the cluster's timezone.",
+                "example": 1,
+                "maximum": 23,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "timezone": {
+                "description": "IANA timezone the window is expressed in, derived from the cluster's region.",
+                "example": "America/New_York",
+                "type": "string"
+              }
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "updateMetadataRequest": {
         "properties": {
           "machine_version": {
@@ -5042,6 +5132,39 @@
           "updated_at": {
             "description": "Time to record for the change in the Machine's `metadata_update` event. Defaults to now.",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "updatePostgresMaintenanceWindowRequest": {
+        "properties": {
+          "day": {
+            "description": "Day of the week the window starts on.",
+            "enum": [
+              "sunday",
+              "monday",
+              "tuesday",
+              "wednesday",
+              "thursday",
+              "friday",
+              "saturday"
+            ],
+            "example": "tuesday",
+            "type": "string"
+          },
+          "duration_hours": {
+            "description": "Length of the window in hours.",
+            "example": 3,
+            "maximum": 8,
+            "minimum": 3,
+            "type": "integer"
+          },
+          "start_hour": {
+            "description": "Hour of the day the window starts, in the cluster's timezone.",
+            "example": 4,
+            "maximum": 23,
+            "minimum": 0,
+            "type": "integer"
           }
         },
         "type": "object"
@@ -10594,6 +10717,162 @@
           }
         },
         "summary": "Fork Cluster to New Cluster",
+        "tags": [
+          "Postgres Clusters"
+        ],
+        "x-codegen-request-body-name": "request"
+      }
+    },
+    "/v1/postgres/{postgres_cluster_id}/maintenance_window": {
+      "get": {
+        "description": "Get the weekly window in which a cluster may undergo maintenance. A cluster that never set one returns its region's default. Some clusters have no window: their maintenance can run at any time, and `data` is null. Requires only read access to the organization.",
+        "operationId": "Postgres_maintenance_window_show",
+        "parameters": [
+          {
+            "description": "Managed Postgres Cluster ID",
+            "in": "path",
+            "name": "postgres_cluster_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/showPostgresMaintenanceWindowResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostgresErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostgresErrorResponse"
+                }
+              }
+            },
+            "description": "Cluster not found"
+          }
+        },
+        "summary": "Get Maintenance Window",
+        "tags": [
+          "Postgres Clusters"
+        ]
+      },
+      "patch": {
+        "description": "Update a cluster's weekly maintenance window. Give at least one of `day`, `start_hour` and `duration_hours`; omitted fields keep their current value. `start_hour` is in the cluster's timezone, which is derived from its region and cannot be changed. Changes are accepted only while the cluster is ready and no maintenance is running. A cluster with no window, whose maintenance can run at any time, can't be given one: the request fails with 422. A successful update always returns a window in `data`.",
+        "operationId": "Postgres_maintenance_window_update",
+        "parameters": [
+          {
+            "description": "Managed Postgres Cluster ID",
+            "in": "path",
+            "name": "postgres_cluster_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/updatePostgresMaintenanceWindowRequest"
+              }
+            }
+          },
+          "description": "Maintenance window fields to change",
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/showPostgresMaintenanceWindowResponse"
+                }
+              }
+            },
+            "description": "Updated maintenance window"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostgresErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostgresErrorResponse"
+                }
+              }
+            },
+            "description": "Cluster not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostgresErrorResponse"
+                }
+              }
+            },
+            "description": "The cluster is not ready or a maintenance is running"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostgresErrorResponse"
+                }
+              }
+            },
+            "description": "'This cluster has been deleted' or 'This cluster is being deleted'"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostgresErrorResponse"
+                }
+              }
+            },
+            "description": "No fields given, or a value is invalid; 'Maintenance can run at any time' for a cluster with no window"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostgresErrorResponse"
+                }
+              }
+            },
+            "description": "Failed to update maintenance window"
+          }
+        },
+        "summary": "Update Maintenance Window",
         "tags": [
           "Postgres Clusters"
         ],
