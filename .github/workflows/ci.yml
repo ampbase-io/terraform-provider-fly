@@ -23,7 +23,7 @@ jobs:
         name: gofmt
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.13.1
+          version: v2.15.0
       - run: go test ./...
       - run: go build .
   # fly_machine's host-full replace rests on tofu mechanics no fake can
